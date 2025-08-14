@@ -2,6 +2,7 @@ package presentation
 
 import (
 	"net/http"
+	"othello_game_go/internal/dto"
 	"othello_game_go/internal/usecase"
 
 	"github.com/gin-gonic/gin"
@@ -20,6 +21,15 @@ func NewGameRequestHandler(match usecase.IGameMatch) IGameRequestHandler {
 }
 
 func (rh *GameRequestHandler) CreateGame(ctx *gin.Context) {
-	rh.match.CreaeMatch()
-	ctx.JSON(http.StatusOK, gin.H{"data": "Create Done"})
+	var input dto.CreateGameInput
+	err := ctx.ShouldBindJSON(&input)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	gameid, playerid, err := rh.match.CreateMatch(input.Player)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+	ctx.JSON(http.StatusOK, gin.H{"gameid": gameid, "playerid": playerid})
 }

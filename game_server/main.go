@@ -12,6 +12,6 @@ func main() {
 	gameRequestHandler := presentation.NewGameRequestHandler(gameMath)
 	r := gin.Default()
 
-	r.GET("/create", gameRequestHandler.CreateGame)
+	r.POST("/create", gameRequestHandler.CreateGame)
 	r.Run()
 }
