@@ -3,6 +3,7 @@ package usecase
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"log"
 	"othello_game_go/internal/domain"
 	"time"
@@ -10,14 +11,53 @@ import (
 
 type IGameMatch interface {
 	CreateMatch(playerName string) (gameid, playerid string, err error)
+	ExecuteCommand(command ICommand)
+	GetMatch(gameId string) *domain.Game
+}
+
+type ICommand interface {
+	execute()
 }
 
 type GameMatch struct {
 	gameinfo map[string]domain.Game
+	cmd      map[string]chan ICommand
+}
+
+type Reply struct {
+	Result string
+	Err    error
 }
 
 func NewGameMatch() IGameMatch {
 	return &GameMatch{gameinfo: map[string]domain.Game{}}
+}
+
+type JoinCommand struct {
+	GameId     string
+	PlayerName string
+	Match      *domain.Game
+	Reply      chan Reply
+}
+
+func (jc *JoinCommand) execute() {
+
+	pid := "p" + RandomID(6)
+	color := domain.White
+	if len(jc.Match.Players) == 0 {
+		color = domain.Black
+	}
+	jc.Match.Players[pid] = domain.Player{
+		ID:    pid,
+		Name:  jc.PlayerName,
+		Color: color,
+	}
+
+	if jc.Match.Status == "Waiting" {
+		jc.Match.Status = "Playing"
+	}
+	jc.Reply <- Reply{Result: pid, Err: nil}
+	log.Println("Join Command Done!", jc.Match.Players[pid])
 }
 
 func (m *GameMatch) CreateMatch(playerName string) (gameid, playerid string, err error) {
@@ -37,6 +77,8 @@ func (m *GameMatch) CreateMatch(playerName string) (gameid, playerid string, err
 	gameinfo.Board[3][4], gameinfo.Board[4][3] = domain.Black, domain.Black
 
 	m.gameinfo[gameinfo.ID] = gameinfo
+	m.cmd = map[string]chan ICommand{}
+	m.cmd[gameinfo.ID] = make(chan ICommand)
 	log.Printf("Create Match for : %s\n", playerName)
 
 	go m.gameLoop(gameinfo.ID)
@@ -46,9 +88,41 @@ func (m *GameMatch) CreateMatch(playerName string) (gameid, playerid string, err
 
 func (m *GameMatch) gameLoop(id string) {
 	for {
+		// TODO コマンドが増えたら実装
+		//select {
+		cmd := <-m.cmd[id]
+		switch c := cmd.(type) {
+		case *JoinCommand:
+			if match, ok := m.gameinfo[c.GameId]; !ok {
+				c.Reply <- Reply{Err: errors.New("game match not exist")}
+			} else {
+				c.Match = &match
+				c.execute()
+			}
+		}
+		//}
 		log.Printf("game looping session id : %s\n", m.gameinfo[id].ID)
 		time.Sleep(3 * time.Second)
 	}
+}
+
+func (m *GameMatch) ExecuteCommand(command ICommand) {
+	switch c := command.(type) {
+	case *JoinCommand:
+		if v, ok := m.cmd[c.GameId]; !ok {
+			c.Reply <- Reply{Err: errors.New("game match not exist")}
+
+		} else {
+			v <- c
+		}
+	default:
+		log.Println("execute command default")
+	}
+}
+
+func (m *GameMatch) GetMatch(gameId string) *domain.Game {
+	g := m.gameinfo[gameId]
+	return &g
 }
 
 // ランダムなIDを生成する

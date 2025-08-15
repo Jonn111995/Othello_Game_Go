@@ -13,5 +13,6 @@ func main() {
 	r := gin.Default()
 
 	r.POST("/create", gameRequestHandler.CreateGame)
+	r.POST(":gameId/join", gameRequestHandler.JoinGame)
 	r.Run()
 }
