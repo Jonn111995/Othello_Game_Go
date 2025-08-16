@@ -2,6 +2,7 @@ package presentation
 
 import (
 	"net/http"
+	"othello_game_go/internal/domain"
 	"othello_game_go/internal/dto"
 	"othello_game_go/internal/usecase"
 
@@ -11,6 +12,7 @@ import (
 type IGameRequestHandler interface {
 	CreateGame(ctx *gin.Context)
 	JoinGame(ctx *gin.Context)
+	GetGameState(ctx *gin.Context)
 }
 
 type GameRequestHandler struct {
@@ -57,4 +59,20 @@ func (rh *GameRequestHandler) JoinGame(ctx *gin.Context) {
 		}
 	}
 	ctx.JSON(http.StatusOK, gin.H{"join_game gid": gameId})
+}
+
+func (rh *GameRequestHandler) GetGameState(ctx *gin.Context) {
+	gameId := ctx.Param("gameId")
+
+	ch := make(chan *domain.Game, 1)
+	cm := &usecase.StateRequest{
+		GameId: gameId,
+		Reply:  ch,
+	}
+	rh.match.ExecuteCommand(cm)
+	result := <-cm.Reply
+	if result == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "game not exist"})
+	}
+	ctx.JSON(http.StatusOK, gin.H{"join_game gid": result})
 }

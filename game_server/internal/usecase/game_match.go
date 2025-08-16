@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"othello_game_go/internal/domain"
+	"sync"
 	"time"
 )
 
@@ -13,6 +14,8 @@ type IGameMatch interface {
 	CreateMatch(playerName string) (gameid, playerid string, err error)
 	ExecuteCommand(command ICommand)
 	GetMatch(gameId string) *domain.Game
+	Subscribe(ch chan Event)
+	UnSubscribe(ch chan Event)
 }
 
 type ICommand interface {
@@ -20,8 +23,16 @@ type ICommand interface {
 }
 
 type GameMatch struct {
-	gameinfo map[string]domain.Game
+	gameinfo map[string]*domain.Game
 	cmd      map[string]chan ICommand
+
+	mutex       sync.Mutex
+	subscribers []chan Event
+}
+
+type Event struct {
+	Event   string      `json:"type"`
+	Payload interface{} `json:"payload`
 }
 
 type Reply struct {
@@ -30,7 +41,7 @@ type Reply struct {
 }
 
 func NewGameMatch() IGameMatch {
-	return &GameMatch{gameinfo: map[string]domain.Game{}}
+	return &GameMatch{gameinfo: map[string]*domain.Game{}}
 }
 
 type JoinCommand struct {
@@ -60,6 +71,32 @@ func (jc *JoinCommand) execute() {
 	log.Println("Join Command Done!", jc.Match.Players[pid])
 }
 
+type StateRequest struct {
+	GameId string
+	Reply  chan *domain.Game
+}
+
+func (sr *StateRequest) execute() {
+
+}
+
+func (m *GameMatch) Subscribe(ch chan Event) {
+	m.mutex.Lock()
+	m.subscribers = append(m.subscribers, ch)
+	m.mutex.Unlock()
+}
+
+func (m *GameMatch) UnSubscribe(ch chan Event) {
+	m.mutex.Lock()
+	for i, sc := range m.subscribers {
+		if sc == ch {
+			m.subscribers = append(m.subscribers[:i], m.subscribers[i+1:]...)
+			break
+		}
+	}
+	m.mutex.Unlock()
+}
+
 func (m *GameMatch) CreateMatch(playerName string) (gameid, playerid string, err error) {
 	gameinfo := domain.Game{
 		ID:      "g" + RandomID(8),
@@ -76,7 +113,7 @@ func (m *GameMatch) CreateMatch(playerName string) (gameid, playerid string, err
 	gameinfo.Board[3][3], gameinfo.Board[4][4] = domain.White, domain.White
 	gameinfo.Board[3][4], gameinfo.Board[4][3] = domain.Black, domain.Black
 
-	m.gameinfo[gameinfo.ID] = gameinfo
+	m.gameinfo[gameinfo.ID] = &gameinfo
 	m.cmd = map[string]chan ICommand{}
 	m.cmd[gameinfo.ID] = make(chan ICommand)
 	log.Printf("Create Match for : %s\n", playerName)
@@ -96,9 +133,14 @@ func (m *GameMatch) gameLoop(id string) {
 			if match, ok := m.gameinfo[c.GameId]; !ok {
 				c.Reply <- Reply{Err: errors.New("game match not exist")}
 			} else {
-				c.Match = &match
+				c.Match = match
 				c.execute()
 			}
+		case *StateRequest:
+			log.Printf("state request gameloop: %v", m.gameinfo[id].Clone())
+			c.Reply <- m.gameinfo[id].Clone()
+		default:
+			log.Printf("game looping default")
 		}
 		//}
 		log.Printf("game looping session id : %s\n", m.gameinfo[id].ID)
@@ -115,14 +157,27 @@ func (m *GameMatch) ExecuteCommand(command ICommand) {
 		} else {
 			v <- c
 		}
+	case *StateRequest:
+		if v, ok := m.cmd[c.GameId]; !ok {
+			log.Println("state request nil")
+			c.Reply <- nil
+
+		} else {
+			log.Println("state request else")
+			v <- c
+
+		}
 	default:
 		log.Println("execute command default")
 	}
 }
 
 func (m *GameMatch) GetMatch(gameId string) *domain.Game {
-	g := m.gameinfo[gameId]
-	return &g
+	g, ok := m.gameinfo[gameId]
+	if !ok {
+		return nil
+	}
+	return g
 }
 
 // ランダムなIDを生成する

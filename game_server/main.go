@@ -10,9 +10,13 @@ import (
 func main() {
 	gameMath := usecase.NewGameMatch()
 	gameRequestHandler := presentation.NewGameRequestHandler(gameMath)
+	websocket := presentation.NewWebsocketHandler(gameMath)
 	r := gin.Default()
 
 	r.POST("/create", gameRequestHandler.CreateGame)
 	r.POST(":gameId/join", gameRequestHandler.JoinGame)
+	r.GET(":gameId/ws", websocket.ServeWS)
+	r.GET("/getstate/:gameId", gameRequestHandler.GetGameState)
+
 	r.Run()
 }
