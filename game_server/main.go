@@ -15,6 +15,7 @@ func main() {
 
 	r.POST("/create", gameRequestHandler.CreateGame)
 	r.POST(":gameId/join", gameRequestHandler.JoinGame)
+	r.POST("move/:gameId", gameRequestHandler.MoveOthello)
 	r.GET(":gameId/ws", websocket.ServeWS)
 	r.GET("/getstate/:gameId", gameRequestHandler.GetGameState)
 

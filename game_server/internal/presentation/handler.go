@@ -12,6 +12,7 @@ import (
 type IGameRequestHandler interface {
 	CreateGame(ctx *gin.Context)
 	JoinGame(ctx *gin.Context)
+	MoveOthello(ctx *gin.Context)
 	GetGameState(ctx *gin.Context)
 }
 
@@ -59,6 +60,19 @@ func (rh *GameRequestHandler) JoinGame(ctx *gin.Context) {
 		}
 	}
 	ctx.JSON(http.StatusOK, gin.H{"join_game gid": gameId})
+}
+
+func (rh *GameRequestHandler) MoveOthello(ctx *gin.Context) {
+	gameId := ctx.Param("gameId")
+	if gameId == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "gameID is required"})
+	}
+	var input dto.MoveOthelloInput
+	err := ctx.ShouldBindJSON(&input)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "gameID is required"})
+	}
+	ctx.JSON(http.StatusOK, gin.H{"move gid": gameId, "move pid": input.PlayerId, "X": input.X, "Y": input.Y})
 }
 
 func (rh *GameRequestHandler) GetGameState(ctx *gin.Context) {
