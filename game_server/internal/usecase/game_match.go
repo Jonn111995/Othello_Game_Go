@@ -97,6 +97,22 @@ func (m *GameMatch) UnSubscribe(ch chan Event) {
 	m.mutex.Unlock()
 }
 
+func (m *GameMatch) broadcast(e Event) {
+	m.mutex.Lock()
+	subs := make([]chan Event, len(m.subscribers))
+	copy(subs, m.subscribers)
+	log.Printf("broadcast %v", subs)
+	m.mutex.Unlock()
+
+	for _, ch := range subs {
+		select {
+		case ch <- e:
+			log.Printf("broadcast ch <- e")
+		default:
+		}
+	}
+}
+
 func (m *GameMatch) CreateMatch(playerName string) (gameid, playerid string, err error) {
 	gameinfo := domain.Game{
 		ID:      "g" + RandomID(8),
@@ -135,6 +151,7 @@ func (m *GameMatch) gameLoop(id string) {
 			} else {
 				c.Match = match
 				c.execute()
+				m.broadcast(Event{Event: "State", Payload: m.gameinfo[id].Clone()})
 			}
 		case *StateRequest:
 			log.Printf("state request gameloop: %v", m.gameinfo[id].Clone())

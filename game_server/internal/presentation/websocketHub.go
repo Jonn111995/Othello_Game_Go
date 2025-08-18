@@ -1,6 +1,7 @@
 package presentation
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"othello_game_go/internal/domain"
@@ -58,5 +59,16 @@ func (ws *WebsocketHandler) ServeWS(ctx *gin.Context) {
 	if gameinfo := <-rc; gameinfo != nil {
 		log.Println("serveWS gameinfo")
 		conn.WriteJSON(map[string]any{"type": "state", "gameinfo": gameinfo})
+	}
+
+	for ev := range evCh {
+		// JSON にエンコードして送る。小さな最適化のために json.Marshal を使っている
+		b, _ := json.Marshal(ev)
+		// WriteMessage を使って TextMessage を送信する。
+		// ここでエラーが起きたら（接続切断など）、writer を抜けて接続をクローズする
+		if err := conn.WriteMessage(websocket.TextMessage, b); err != nil {
+			log.Println("ws write err:", err)
+			return
+		}
 	}
 }
