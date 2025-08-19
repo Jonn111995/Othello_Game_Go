@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"othello_game_go/internal/domain"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -76,8 +77,55 @@ type StateRequest struct {
 	Reply  chan *domain.Game
 }
 
-func (sr *StateRequest) execute() {
+func (sr *StateRequest) execute() {}
 
+// オセロを動かすときに必要なデータ
+type MoveCommand struct {
+	GameId   string
+	PlayerId string
+	Match    *domain.Game
+	X        string
+	Y        string
+	Reply    chan Reply
+}
+
+func (mc *MoveCommand) execute() {
+	// Turn=PlayerIDなので、不一致であればそのPlayerのターンではない
+	if mc.PlayerId != mc.Match.Turn {
+		mc.Reply <- Reply{Err: errors.New("not your turn")}
+		return
+	}
+	// Player情報を取得
+	p, ok := mc.Match.Players[mc.PlayerId]
+	if !ok {
+		mc.Reply <- Reply{Err: errors.New("unknown player")}
+		return
+	}
+	x, err := strconv.Atoi(mc.X)
+	if err != nil {
+		mc.Reply <- Reply{Err: err}
+		return
+	}
+	y, err := strconv.Atoi(mc.Y)
+	if err != nil {
+		mc.Reply <- Reply{Err: err}
+		return
+	}
+	// リクエストで送られた位置にオセロを置く
+	err = domain.ApplyMove(&mc.Match.Board, x, y, p.Color)
+	if err != nil {
+		mc.Reply <- Reply{Err: err}
+		return
+	}
+	// 手番を相手に切り替える
+	mc.Match.Turn = func(game *domain.Game, nowPlayer string) string {
+		for otherId := range game.Players {
+			if nowPlayer != otherId {
+				return otherId
+			}
+		}
+		return nowPlayer
+	}(mc.Match, p.ID)
 }
 
 func (m *GameMatch) Subscribe(ch chan Event) {
@@ -153,6 +201,26 @@ func (m *GameMatch) gameLoop(id string) {
 				c.execute()
 				m.broadcast(Event{Event: "State", Payload: m.gameinfo[id].Clone()})
 			}
+		// オセロを動かす分岐
+		case *MoveCommand:
+			if match, ok := m.gameinfo[c.GameId]; !ok {
+				c.Reply <- Reply{Err: errors.New("game match not exist")}
+			} else {
+				c.Match = match
+				// オセロを動かす処理の実行
+				c.execute()
+				// クライアントにオセロの移動情報とゲームの状態を同期する
+				m.broadcast(Event{Event: "Move",
+					Payload: map[string]any{
+						"player_id": c.PlayerId,
+						"x":         c.X,
+						"y":         c.Y,
+					}})
+				m.broadcast(Event{Event: "State",
+					Payload: m.gameinfo[id].Clone(),
+				})
+				c.Reply <- Reply{Err: nil}
+			}
 		case *StateRequest:
 			log.Printf("state request gameloop: %v", m.gameinfo[id].Clone())
 			c.Reply <- m.gameinfo[id].Clone()
@@ -171,6 +239,12 @@ func (m *GameMatch) ExecuteCommand(command ICommand) {
 		if v, ok := m.cmd[c.GameId]; !ok {
 			c.Reply <- Reply{Err: errors.New("game match not exist")}
 
+		} else {
+			v <- c
+		}
+	case *MoveCommand:
+		if v, ok := m.cmd[c.GameId]; !ok {
+			c.Reply <- Reply{Err: errors.New("game match not exist")}
 		} else {
 			v <- c
 		}
