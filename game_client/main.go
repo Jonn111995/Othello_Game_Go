@@ -31,10 +31,22 @@ func main() {
 		log.Fatal("mode must be create or join")
 	}
 
-	if mode == "create" {
+	switch mode {
+	case "create":
 		res, err := client.CreateGame(serverURL, name)
 		if err != nil && res == nil {
 			fmt.Println("Failed to create game")
+			return
+		}
+		fmt.Println("Create Game:", res.GameId, "player:", res.PlayerId)
+	case "join":
+		if joinGame == "" {
+			fmt.Printf("Failed to join game")
+			return
+		}
+		res, err := client.JoinGame(serverURL, joinGame, name)
+		if err != nil && res == nil {
+			fmt.Println("Failed to join game")
 			return
 		}
 		fmt.Println("Joined Game:", res.GameId, "player:", res.PlayerId)

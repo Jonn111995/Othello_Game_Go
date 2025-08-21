@@ -6,5 +6,14 @@ type CreateGameRequest struct {
 
 type CreateGameResponse struct {
 	GameId   string `json:"gameid" binding:"required"`
-	PlayerId string `json:"palyerid" binding:"required"`
+	PlayerId string `json:"playerid" binding:"required"`
+}
+
+type JoinGameRequest struct {
+	Player string `json:"player" binding:"required"`
+}
+
+type JoinGameResponse struct {
+	GameId   string `json:"gameid" binding:"required"`
+	PlayerId string `json:"playerid" binding:"required"`
 }
