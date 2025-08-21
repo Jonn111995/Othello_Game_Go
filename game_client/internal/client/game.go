@@ -5,17 +5,37 @@ import (
 
 	"github.com/hajimehoshi/ebiten"
 	"github.com/hajimehoshi/ebiten/ebitenutil"
+	"github.com/hajimehoshi/ebiten/inpututil"
 )
 
 type Game struct {
-	board [8][8]int
+	board     [8][8]int
+	serverURL string
+	gameId    string
+	playerId  string
 }
 
-func NewGame(board [8][8]int) *Game {
-	return &Game{board: board}
+func NewGame(board [8][8]int, serverURL, gameId, playerId string) *Game {
+	return &Game{
+		board:     board,
+		serverURL: serverURL,
+		gameId:    gameId,
+		playerId:  playerId,
+	}
 }
 
 func (g *Game) Update(screen *ebiten.Image) error {
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+		x, y := ebiten.CursorPosition()
+		// 描画している矩形サイズが64x64なので、8x8の2次元配列の要素を指し示すためには64で割る必要がある
+		// x = 64 64で割ると1になるので、配列の1番目
+		// y = 39 64で割ると0になるので、配列の0番目を指す
+		cellX := x / 64
+		cellY := y / 64
+		if cellX >= 0 && cellX < 8 && cellY >= 0 && cellY < 8 {
+			PostMoveAsync(g.serverURL, g.gameId, g.playerId, cellX, cellY)
+		}
+	}
 	return nil
 }
 

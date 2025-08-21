@@ -30,7 +30,7 @@ func main() {
 	if mode != "create" && mode != "join" {
 		log.Fatal("mode must be create or join")
 	}
-
+	var playerId string
 	switch mode {
 	case "create":
 		res, err := client.CreateGame(serverURL, name)
@@ -38,6 +38,8 @@ func main() {
 			fmt.Println("Failed to create game")
 			return
 		}
+		joinGame = res.GameId
+		playerId = res.PlayerId
 		fmt.Println("Create Game:", res.GameId, "player:", res.PlayerId)
 	case "join":
 		if joinGame == "" {
@@ -49,6 +51,8 @@ func main() {
 			fmt.Println("Failed to join game")
 			return
 		}
+		playerId = res.PlayerId
+		joinGame = res.GameId
 		fmt.Println("Joined Game:", res.GameId, "player:", res.PlayerId)
 	}
 
@@ -64,7 +68,7 @@ func main() {
 		{0, 0, 0, 0, 0, 0, 0, 0},
 		{0, 0, 0, 0, 0, 0, 0, 0},
 	}
-	game := client.NewGame(board)
+	game := client.NewGame(board, serverURL, joinGame, playerId)
 	ebiten.SetWindowSize(320, 240)
 	ebiten.RunGame(game)
 }
