@@ -65,14 +65,10 @@ func main() {
 	if err != nil {
 		log.Printf("websocket connect error: %s", err)
 	}
-	go client.WSReader(conn)
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-	go func() { <-c; conn.Close(); os.Exit(0) }()
 
 	// 仮のマップチップ
 	// 動作確認用
-	var board [8][8]int = [8][8]int{
+	var board client.Board = client.Board{
 		{0, 0, 0, 0, 0, 0, 0, 0},
 		{0, 0, 0, 0, 0, 0, 0, 0},
 		{0, 0, 0, 0, 0, 0, 0, 0},
@@ -82,7 +78,13 @@ func main() {
 		{0, 0, 0, 0, 0, 0, 0, 0},
 		{0, 0, 0, 0, 0, 0, 0, 0},
 	}
-	game := client.NewGame(board, serverURL, joinGame, playerId)
+
+	go client.WSReader(conn, &board)
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	go func() { <-c; conn.Close(); os.Exit(0) }()
+
+	game := client.NewGame(&board, serverURL, joinGame, playerId)
 	ebiten.SetWindowSize(320, 240)
 	ebiten.RunGame(game)
 }

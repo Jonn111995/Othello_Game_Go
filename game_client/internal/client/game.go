@@ -2,20 +2,28 @@ package client
 
 import (
 	"image/color"
+	"log"
 
 	"github.com/hajimehoshi/ebiten"
 	"github.com/hajimehoshi/ebiten/ebitenutil"
 	"github.com/hajimehoshi/ebiten/inpututil"
 )
 
+type Board [8][8]int
+
+func (b *Board) UpdateBoard(newboard Board) {
+	log.Printf("UpdateBoard : board = : %v\n", newboard)
+	*b = newboard
+}
+
 type Game struct {
-	board     [8][8]int
+	board     *Board
 	serverURL string
 	gameId    string
 	playerId  string
 }
 
-func NewGame(board [8][8]int, serverURL, gameId, playerId string) *Game {
+func NewGame(board *Board, serverURL, gameId, playerId string) *Game {
 	return &Game{
 		board:     board,
 		serverURL: serverURL,
