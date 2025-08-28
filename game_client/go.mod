@@ -2,7 +2,10 @@ module game_client
 
 go 1.24.5
 
-require github.com/hajimehoshi/ebiten v1.12.12
+require (
+	github.com/gorilla/websocket v1.5.3
+	github.com/hajimehoshi/ebiten v1.12.12
+)
 
 require (
 	github.com/go-gl/glfw/v3.3/glfw v0.0.0-20200707082815-5321531c36a2 // indirect
