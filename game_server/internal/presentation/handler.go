@@ -1,6 +1,7 @@
 package presentation
 
 import (
+	"log"
 	"net/http"
 	"othello_game_go/internal/domain"
 	"othello_game_go/internal/dto"
@@ -34,6 +35,7 @@ func (rh *GameRequestHandler) CreateGame(ctx *gin.Context) {
 	gameid, playerid, err := rh.match.CreateMatch(input.Player)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"gameid": gameid, "playerid": playerid})
 }
@@ -43,6 +45,7 @@ func (rh *GameRequestHandler) JoinGame(ctx *gin.Context) {
 	err := ctx.ShouldBindJSON(&input)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 	gameId := ctx.Param("gameId")
 
@@ -57,21 +60,26 @@ func (rh *GameRequestHandler) JoinGame(ctx *gin.Context) {
 	if result.Err != nil {
 		if result.Err.Error() == "game match not exist" {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": result.Err.Error()})
+			return
 		}
 	}
-	ctx.JSON(http.StatusOK, gin.H{"join_game gid": gameId})
+	ctx.JSON(http.StatusOK, gin.H{"gameId": gameId, "playerId": result.Result})
 }
 
 // オセロを動かす処理のエンドポイント
 func (rh *GameRequestHandler) MoveOthello(ctx *gin.Context) {
 	gameId := ctx.Param("gameId")
 	if gameId == "" {
+		log.Print("game id require")
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "gameID is required"})
+		return
 	}
 	var input dto.MoveOthelloInput
 	err := ctx.ShouldBindJSON(&input)
 	if err != nil {
+		log.Print("err should bind")
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "gameID is required"})
+		return
 	}
 
 	ch := make(chan usecase.Reply, 1)
@@ -87,6 +95,7 @@ func (rh *GameRequestHandler) MoveOthello(ctx *gin.Context) {
 	result := <-cm.Reply
 	if result.Err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": result.Err.Error()})
+		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"move gid": gameId, "move pid": input.PlayerId, "X": input.X, "Y": input.Y})
 }
@@ -103,6 +112,7 @@ func (rh *GameRequestHandler) GetGameState(ctx *gin.Context) {
 	result := <-cm.Reply
 	if result == nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "game not exist"})
+		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"join_game gid": result})
 }

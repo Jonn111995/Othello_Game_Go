@@ -8,7 +8,6 @@ import (
 	"othello_game_go/internal/domain"
 	"strconv"
 	"sync"
-	"time"
 )
 
 type IGameMatch interface {
@@ -33,7 +32,7 @@ type GameMatch struct {
 
 type Event struct {
 	Event   string      `json:"type"`
-	Payload interface{} `json:"payload`
+	Payload interface{} `json:"payload"`
 }
 
 type Reply struct {
@@ -147,6 +146,7 @@ func (m *GameMatch) UnSubscribe(ch chan Event) {
 
 func (m *GameMatch) broadcast(e Event) {
 	m.mutex.Lock()
+	// Websocketで送るデータをリッスンしているチャネルのスライスのコピーを作成する
 	subs := make([]chan Event, len(m.subscribers))
 	copy(subs, m.subscribers)
 	log.Printf("broadcast %v", subs)
@@ -199,7 +199,9 @@ func (m *GameMatch) gameLoop(id string) {
 			} else {
 				c.Match = match
 				c.execute()
-				m.broadcast(Event{Event: "State", Payload: m.gameinfo[id].Clone()})
+				game := make(map[string]*domain.Game)
+				game["game"] = m.gameinfo[id].Clone()
+				m.broadcast(Event{Event: "state", Payload: game})
 			}
 		// オセロを動かす分岐
 		case *MoveCommand:
@@ -210,14 +212,15 @@ func (m *GameMatch) gameLoop(id string) {
 				// オセロを動かす処理の実行
 				c.execute()
 				// クライアントにオセロの移動情報とゲームの状態を同期する
-				m.broadcast(Event{Event: "Move",
+				m.broadcast(Event{Event: "move",
 					Payload: map[string]any{
 						"player_id": c.PlayerId,
 						"x":         c.X,
 						"y":         c.Y,
 					}})
-				m.broadcast(Event{Event: "State",
-					Payload: m.gameinfo[id].Clone(),
+				log.Printf("game loop board: %v", *m.gameinfo[id].Clone())
+				m.broadcast(Event{Event: "state",
+					Payload: *m.gameinfo[id].Clone(),
 				})
 				c.Reply <- Reply{Err: nil}
 			}
@@ -227,9 +230,7 @@ func (m *GameMatch) gameLoop(id string) {
 		default:
 			log.Printf("game looping default")
 		}
-		//}
 		log.Printf("game looping session id : %s\n", m.gameinfo[id].ID)
-		time.Sleep(3 * time.Second)
 	}
 }
 

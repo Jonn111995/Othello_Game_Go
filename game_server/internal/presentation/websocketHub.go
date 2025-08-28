@@ -47,21 +47,23 @@ func (ws *WebsocketHandler) ServeWS(ctx *gin.Context) {
 
 	evCh := make(chan usecase.Event, 128)
 	ws.match.Subscribe(evCh)
-	// TODO 後で有効化する
-	// defer func() {
-	// 	ws.match.UnSubscribe(evCh)
-	// 	close(evCh)
-	// 	conn.Close()
-	// }()
+	defer func() {
+		ws.match.UnSubscribe(evCh)
+		close(evCh)
+		conn.Close()
+	}()
 
 	rc := make(chan *domain.Game, 1)
 	ws.match.ExecuteCommand(&usecase.StateRequest{GameId: gameId, Reply: rc})
 	if gameinfo := <-rc; gameinfo != nil {
 		log.Println("serveWS gameinfo")
-		conn.WriteJSON(map[string]any{"type": "state", "gameinfo": gameinfo})
+		log.Printf("serveWS: %v", gameinfo)
+		conn.WriteJSON(map[string]any{"type": "state", "payload": *gameinfo.Clone()})
 	}
 
+	// usecase層からのチャネルに対するデータの送信をポーリングし続ける
 	for ev := range evCh {
+		log.Printf("serveWS: %v", ev)
 		// JSON にエンコードして送る。小さな最適化のために json.Marshal を使っている
 		b, _ := json.Marshal(ev)
 		// WriteMessage を使って TextMessage を送信する。
