@@ -2,33 +2,21 @@ package client
 
 import (
 	"image/color"
-	"log"
 
 	"github.com/hajimehoshi/ebiten"
 	"github.com/hajimehoshi/ebiten/ebitenutil"
 	"github.com/hajimehoshi/ebiten/inpututil"
 )
 
-type Board [8][8]int
-
-func (b *Board) UpdateBoard(newboard Board) {
-	log.Printf("UpdateBoard : board = : %v\n", newboard)
-	*b = newboard
-}
-
 type Game struct {
-	board     *Board
+	state     *ClientState
 	serverURL string
-	gameId    string
-	playerId  string
 }
 
-func NewGame(board *Board, serverURL, gameId, playerId string) *Game {
+func NewGame(newstate *ClientState, serverURL string) *Game {
 	return &Game{
-		board:     board,
+		state:     newstate,
 		serverURL: serverURL,
-		gameId:    gameId,
-		playerId:  playerId,
 	}
 }
 
@@ -41,7 +29,7 @@ func (g *Game) Update(screen *ebiten.Image) error {
 		cellX := x / 64
 		cellY := y / 64
 		if cellX >= 0 && cellX < 8 && cellY >= 0 && cellY < 8 {
-			PostMoveAsync(g.serverURL, g.gameId, g.playerId, cellX, cellY)
+			PostMoveAsync(g.serverURL, g.state.gameID, g.state.playerID, cellX, cellY)
 		}
 	}
 	return nil
@@ -57,15 +45,15 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			// 緑色の背景の部分
 			// ワールド座標いっぱいに隙間なく敷き詰めるので、64x64の矩形で描画
 			ebitenutil.DrawRect(screen, float64(x), float64(y), 64, 64, color.RGBA{0x20, 0x80, 0x30, 0xff})
-			b := g.board
+			b := g.state.GetBoardClone()
 			v := b[yy][xx]
 			// オセロの駒の描画
 			// 若干小さく描画するので48x48の矩形で描画する
 			if v == 1 {
-				ebitenutil.DrawRect(screen, float64(x+8), float64(y+8), 48, 48, color.RGBA{0xff, 0xff, 0xff, 0xff})
+				ebitenutil.DrawRect(screen, float64(x+8), float64(y+8), 48, 48, color.RGBA{0x00, 0x00, 0x00, 0xff})
 			}
 			if v == -1 {
-				ebitenutil.DrawRect(screen, float64(x+8), float64(y+8), 48, 48, color.RGBA{0x00, 0x00, 0x00, 0xff})
+				ebitenutil.DrawRect(screen, float64(x+8), float64(y+8), 48, 48, color.RGBA{0xff, 0xff, 0xff, 0xff})
 			}
 		}
 	}

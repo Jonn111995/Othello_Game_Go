@@ -34,7 +34,7 @@ func main() {
 	if mode != "create" && mode != "join" {
 		log.Fatal("mode must be create or join")
 	}
-	var playerId string
+	gamestate := client.NewClientState()
 	switch mode {
 	case "create":
 		res, err := client.CreateGame(serverURL, name)
@@ -42,9 +42,8 @@ func main() {
 			fmt.Println("Failed to create game")
 			return
 		}
-		joinGame = res.GameId
-		playerId = res.PlayerId
-		fmt.Println("Create Game:", res.GameId, "player:", res.PlayerId)
+		gamestate.SetIDs(res.GameId, res.PlayerId)
+		fmt.Println("Create Game ID:", res.GameId, "player ID:", res.PlayerId)
 	case "join":
 		if joinGame == "" {
 			fmt.Printf("Failed to join game")
@@ -55,36 +54,29 @@ func main() {
 			fmt.Println("Failed to join game")
 			return
 		}
-		playerId = res.PlayerId
-		joinGame = res.GameId
-		fmt.Println("Joined Game:", res.GameId, "player:", res.PlayerId)
+		gamestate.SetIDs(res.GameId, res.PlayerId)
+		fmt.Println("Join Game ID:", res.GameId, "player ID:", res.PlayerId)
 	}
 
-	wsURL := toWSURL(serverURL, "/"+joinGame+"/ws")
+	if gamestate.GetGameID() == "" {
+		fmt.Println("connecting game id not exist")
+		return
+	}
+
+	// Websocket通信を確立する
+	wsURL := toWSURL(serverURL, "/"+gamestate.GetGameID()+"/ws")
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		log.Printf("websocket connect error: %s", err)
+		return
 	}
 
-	// 仮のマップチップ
-	// 動作確認用
-	var board client.Board = client.Board{
-		{0, 0, 0, 0, 0, 0, 0, 0},
-		{0, 0, 0, 0, 0, 0, 0, 0},
-		{0, 0, 0, 0, 0, 0, 0, 0},
-		{0, 0, 0, -1, 1, 0, 0, 0},
-		{0, 0, 0, 1, -1, 0, 0, 0},
-		{0, 0, 0, 0, 0, 0, 0, 0},
-		{0, 0, 0, 0, 0, 0, 0, 0},
-		{0, 0, 0, 0, 0, 0, 0, 0},
-	}
-
-	go client.WSReader(conn, &board)
+	go client.WSReader(conn, gamestate)
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	go func() { <-c; conn.Close(); os.Exit(0) }()
 
-	game := client.NewGame(&board, serverURL, joinGame, playerId)
+	game := client.NewGame(gamestate, serverURL)
 	ebiten.SetWindowSize(320, 240)
 	ebiten.RunGame(game)
 }

@@ -82,7 +82,7 @@ func PostMoveAsync(serverURL, gameId, playerId string, x, y int) {
 	}()
 }
 
-func WSReader(conn *websocket.Conn, board *Board) {
+func WSReader(conn *websocket.Conn, game *ClientState) {
 	defer conn.Close()
 
 	for {
@@ -91,15 +91,16 @@ func WSReader(conn *websocket.Conn, board *Board) {
 			log.Println("wsReader error", err)
 			return
 		}
-		//log.Printf("m = %v", m)
+		log.Printf("m = %v", m)
 		if t, ok := m["type"].(string); ok {
 			switch t {
 			case "state":
 				if g, ok := m["payload"].(map[string]any); ok {
-					//log.Printf("payload = %v\n", m["payload"])
+					log.Printf("payload = %v\n", m["payload"])
+					// オセロ盤面の更新
 					var tempboard Board
 					if b, ok := g["board"].([]interface{}); ok {
-						//log.Printf("board = : %v\n", b)
+						log.Printf("board = : %v\n", b)
 						for y := 0; y < len(b) && y < 8; y++ {
 							row, ok := b[y].([]interface{})
 							if !ok {
@@ -112,10 +113,33 @@ func WSReader(conn *websocket.Conn, board *Board) {
 								}
 							}
 						}
-						board.UpdateBoard(tempboard)
+
 					} else {
 						log.Println("WSReader: board not exist")
 					}
+					// Playerの更新
+					tempplayers := map[string]string{}
+					if players, ok := g["players"].(map[string]any); ok {
+						for pid, player := range players {
+							if v, ok := player.(map[string]any); ok {
+								if name, ok := v["name"].(string); ok {
+									tempplayers[pid] = name
+								} else {
+									tempplayers[pid] = ""
+								}
+							}
+						}
+					} else {
+						log.Println("WSReader: players not exist")
+					}
+					// turnの更新
+					tempturn := ""
+					if turn, ok := g["turn"].(string); ok {
+						tempturn = turn
+					} else {
+						log.Println("WSReader: turn not exist")
+					}
+					game.UpdateBoard(tempboard, tempplayers, tempturn)
 				} else {
 					log.Println("WSReader: payload not exist")
 				}
