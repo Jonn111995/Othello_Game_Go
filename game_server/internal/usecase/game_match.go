@@ -11,7 +11,6 @@ import (
 )
 
 type IGameMatch interface {
-	CreateMatch(playerName string) (gameid, playerid string, err error)
 	ExecuteCommand(command ICommand)
 	GetMatch(gameId string) *domain.Game
 	Subscribe(ch chan Event)
@@ -23,9 +22,8 @@ type ICommand interface {
 }
 
 type GameMatch struct {
-	gameinfo map[string]*domain.Game
-	cmd      map[string]chan ICommand
-
+	gameinfo    *domain.Game
+	cmd         chan ICommand
 	mutex       sync.Mutex
 	subscribers []chan Event
 }
@@ -40,8 +38,8 @@ type Reply struct {
 	Err    error
 }
 
-func NewGameMatch() IGameMatch {
-	return &GameMatch{gameinfo: map[string]*domain.Game{}}
+func NewGameMatch(gInfo *domain.Game) IGameMatch {
+	return &GameMatch{gameinfo: gInfo, cmd: make(chan ICommand)}
 }
 
 type JoinCommand struct {
@@ -161,115 +159,91 @@ func (m *GameMatch) broadcast(e Event) {
 	}
 }
 
-func (m *GameMatch) CreateMatch(playerName string) (gameid, playerid string, err error) {
-	gameinfo := domain.Game{
-		ID:      "g" + RandomID(8),
-		Players: map[string]domain.Player{},
-		Status:  "Waiting",
-	}
-	pid := "p" + RandomID(8)
-	gameinfo.Players[pid] = domain.Player{
-		ID:    pid,
-		Name:  playerName,
-		Color: domain.Black,
-	}
-	gameinfo.Turn = pid
-	gameinfo.Board[3][3], gameinfo.Board[4][4] = domain.White, domain.White
-	gameinfo.Board[3][4], gameinfo.Board[4][3] = domain.Black, domain.Black
-
-	m.gameinfo[gameinfo.ID] = &gameinfo
-	m.cmd = map[string]chan ICommand{}
-	m.cmd[gameinfo.ID] = make(chan ICommand)
-	log.Printf("Create Match for : %s\n", playerName)
-
-	go m.gameLoop(gameinfo.ID)
-
-	return gameinfo.ID, pid, nil
-}
-
 func (m *GameMatch) gameLoop(id string) {
-	for {
-		// TODO コマンドが増えたら実装
-		//select {
-		cmd := <-m.cmd[id]
-		switch c := cmd.(type) {
-		case *JoinCommand:
-			if match, ok := m.gameinfo[c.GameId]; !ok {
-				c.Reply <- Reply{Err: errors.New("game match not exist")}
-			} else {
-				c.Match = match
-				c.execute()
-				game := make(map[string]*domain.Game)
-				game["game"] = m.gameinfo[id].Clone()
-				m.broadcast(Event{Event: "state", Payload: game})
-			}
-		// オセロを動かす分岐
-		case *MoveCommand:
-			if match, ok := m.gameinfo[c.GameId]; !ok {
-				c.Reply <- Reply{Err: errors.New("game match not exist")}
-			} else {
-				c.Match = match
-				// オセロを動かす処理の実行
-				c.execute()
-				// クライアントにオセロの移動情報とゲームの状態を同期する
-				m.broadcast(Event{Event: "move",
-					Payload: map[string]any{
-						"player_id": c.PlayerId,
-						"x":         c.X,
-						"y":         c.Y,
-					}})
-				log.Printf("game loop board: %v", *m.gameinfo[id].Clone())
-				m.broadcast(Event{Event: "state",
-					Payload: *m.gameinfo[id].Clone(),
-				})
-				c.Reply <- Reply{Err: nil}
-			}
-		case *StateRequest:
-			log.Printf("state request gameloop: %v", m.gameinfo[id].Clone())
-			c.Reply <- m.gameinfo[id].Clone()
-		default:
-			log.Printf("game looping default")
-		}
-		log.Printf("game looping session id : %s\n", m.gameinfo[id].ID)
-	}
+	// for {
+	// 	// TODO コマンドが増えたら実装
+	// 	//select {
+	// 	cmd := <-m.cmd
+	// 	switch c := cmd.(type) {
+	// 	case *JoinCommand:
+	// 		if match, ok := m.gameinfo[c.GameId]; !ok {
+	// 			c.Reply <- Reply{Err: errors.New("game match not exist")}
+	// 		} else {
+	// 			c.Match = match
+	// 			c.execute()
+	// 			game := make(map[string]*domain.Game)
+	// 			game["game"] = m.gameinfo[id].Clone()
+	// 			m.broadcast(Event{Event: "state", Payload: game})
+	// 		}
+	// 	// オセロを動かす分岐
+	// 	case *MoveCommand:
+	// 		if match, ok := m.gameinfo[c.GameId]; !ok {
+	// 			c.Reply <- Reply{Err: errors.New("game match not exist")}
+	// 		} else {
+	// 			c.Match = match
+	// 			// オセロを動かす処理の実行
+	// 			c.execute()
+	// 			// クライアントにオセロの移動情報とゲームの状態を同期する
+	// 			m.broadcast(Event{Event: "move",
+	// 				Payload: map[string]any{
+	// 					"player_id": c.PlayerId,
+	// 					"x":         c.X,
+	// 					"y":         c.Y,
+	// 				}})
+	// 			log.Printf("game loop board: %v", *m.gameinfo[id].Clone())
+	// 			m.broadcast(Event{Event: "state",
+	// 				Payload: *m.gameinfo[id].Clone(),
+	// 			})
+	// 			c.Reply <- Reply{Err: nil}
+	// 		}
+	// 	case *StateRequest:
+	// 		log.Printf("state request gameloop: %v", m.gameinfo[id].Clone())
+	// 		c.Reply <- m.gameinfo[id].Clone()
+	// 	default:
+	// 		log.Printf("game looping default")
+	// 	}
+	// 	log.Printf("game looping session id : %s\n", m.gameinfo[id].ID)
+	// }
+	log.Printf("game looping default")
 }
 
 func (m *GameMatch) ExecuteCommand(command ICommand) {
-	switch c := command.(type) {
-	case *JoinCommand:
-		if v, ok := m.cmd[c.GameId]; !ok {
-			c.Reply <- Reply{Err: errors.New("game match not exist")}
+	// switch c := command.(type) {
+	// case *JoinCommand:
+	// 	if v, ok := m.cmd[c.GameId]; !ok {
+	// 		c.Reply <- Reply{Err: errors.New("game match not exist")}
 
-		} else {
-			v <- c
-		}
-	case *MoveCommand:
-		if v, ok := m.cmd[c.GameId]; !ok {
-			c.Reply <- Reply{Err: errors.New("game match not exist")}
-		} else {
-			v <- c
-		}
-	case *StateRequest:
-		if v, ok := m.cmd[c.GameId]; !ok {
-			log.Println("state request nil")
-			c.Reply <- nil
+	// 	} else {
+	// 		v <- c
+	// 	}
+	// case *MoveCommand:
+	// 	if v, ok := m.cmd[c.GameId]; !ok {
+	// 		c.Reply <- Reply{Err: errors.New("game match not exist")}
+	// 	} else {
+	// 		v <- c
+	// 	}
+	// case *StateRequest:
+	// 	if v, ok := m.cmd[c.GameId]; !ok {
+	// 		log.Println("state request nil")
+	// 		c.Reply <- nil
 
-		} else {
-			log.Println("state request else")
-			v <- c
+	// 	} else {
+	// 		log.Println("state request else")
+	// 		v <- c
 
-		}
-	default:
-		log.Println("execute command default")
-	}
+	// 	}
+	// default:
+	// 	log.Println("execute command default")
+	// }
 }
 
 func (m *GameMatch) GetMatch(gameId string) *domain.Game {
-	g, ok := m.gameinfo[gameId]
-	if !ok {
-		return nil
-	}
-	return g
+	// g, ok := m.gameinfo[gameId]
+	// if !ok {
+	// 	return nil
+	// }
+	// return g
+	return &domain.Game{}
 }
 
 // ランダムなIDを生成する
