@@ -10,6 +10,7 @@ type IGameMatchManeger interface {
 	CreateGameMatch(playerName string) (playerId, gameId string, err error)
 	StartGameMatch(gameId string) error
 	ExecuteCommand(gameId string, command ICommand) error
+	GetMatch(gameId string) *GameMatch
 }
 
 type GameMatchManeger struct {
@@ -51,6 +52,14 @@ func (gm *GameMatchManeger) StartGameMatch(gameId string) error {
 		go match.gameLoop(gameId)
 		return nil
 	}
+}
+
+func (gm *GameMatchManeger) GetMatch(gameId string) *GameMatch {
+	g, ok := gm.gameMatches[gameId]
+	if !ok {
+		return nil
+	}
+	return g
 }
 
 // ゲームの状態構造体を作成する

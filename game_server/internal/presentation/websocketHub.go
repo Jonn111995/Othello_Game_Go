@@ -16,12 +16,12 @@ type IWebsocketHandler interface {
 }
 
 type WebsocketHandler struct {
-	match    usecase.IGameMatch
-	upgrader websocket.Upgrader
+	matchManeger usecase.IGameMatchManeger
+	upgrader     websocket.Upgrader
 }
 
-func NewWebsocketHandler(match usecase.IGameMatch) IWebsocketHandler {
-	return &WebsocketHandler{match: match}
+func NewWebsocketHandler(matchManeger usecase.IGameMatchManeger) IWebsocketHandler {
+	return &WebsocketHandler{matchManeger: matchManeger}
 }
 
 func (ws *WebsocketHandler) ServeWS(ctx *gin.Context) {
@@ -32,9 +32,9 @@ func (ws *WebsocketHandler) ServeWS(ctx *gin.Context) {
 		return
 	}
 
-	matchinfo := ws.match.GetMatch(gameId)
-	if matchinfo == nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "match not exist"})
+	gameMatch := ws.matchManeger.GetMatch(gameId)
+	if gameMatch != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "gameMatch not exist"})
 		return
 	}
 
@@ -46,15 +46,15 @@ func (ws *WebsocketHandler) ServeWS(ctx *gin.Context) {
 	}
 
 	evCh := make(chan usecase.Event, 128)
-	ws.match.Subscribe(evCh)
+	gameMatch.Subscribe(evCh)
 	defer func() {
-		ws.match.UnSubscribe(evCh)
+		gameMatch.UnSubscribe(evCh)
 		close(evCh)
 		conn.Close()
 	}()
 
 	rc := make(chan *domain.Game, 1)
-	ws.match.ExecuteCommand(&usecase.StateRequest{GameId: gameId, Reply: rc})
+	gameMatch.ExecuteCommand(&usecase.StateRequest{GameId: gameId, Reply: rc})
 	if gameinfo := <-rc; gameinfo != nil {
 		log.Println("serveWS gameinfo")
 		log.Printf("serveWS: %v", gameinfo)

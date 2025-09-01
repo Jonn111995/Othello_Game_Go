@@ -12,7 +12,6 @@ import (
 
 type IGameMatch interface {
 	ExecuteCommand(command ICommand)
-	GetMatch(gameId string) *domain.Game
 	Subscribe(ch chan Event)
 	UnSubscribe(ch chan Event)
 }
@@ -177,20 +176,20 @@ func (m *GameMatch) gameLoop(id string) {
 			// オセロを動かす処理の実行
 			c.execute()
 			// クライアントにオセロの移動情報とゲームの状態を同期する
-			// m.broadcast(Event{Event: "move",
-			// 	Payload: map[string]any{
-			// 		"player_id": c.PlayerId,
-			// 		"x":         c.X,
-			// 		"y":         c.Y,
-			// 	}})
-			// log.Printf("game loop board: %v", *m.gameinfo.Clone())
-			// m.broadcast(Event{Event: "state",
-			// 	Payload: *m.gameinfo.Clone(),
-			// })
+			m.broadcast(Event{Event: "move",
+				Payload: map[string]any{
+					"player_id": c.PlayerId,
+					"x":         c.X,
+					"y":         c.Y,
+				}})
+			log.Printf("game loop board: %v", *m.gameinfo.Clone())
+			m.broadcast(Event{Event: "state",
+				Payload: *m.gameinfo.Clone(),
+			})
 			c.Reply <- Reply{Err: nil}
-		// case *StateRequest:
-		// 	log.Printf("state request gameloop: %v", m.gameinfo[id].Clone())
-		// 	c.Reply <- m.gameinfo[id].Clone()
+		case *StateRequest:
+			log.Printf("state request gameloop: %v", m.gameinfo.Clone())
+			c.Reply <- m.gameinfo.Clone()
 		default:
 			log.Printf("game looping default")
 		}
@@ -200,15 +199,6 @@ func (m *GameMatch) gameLoop(id string) {
 
 func (m *GameMatch) ExecuteCommand(command ICommand) {
 
-}
-
-func (m *GameMatch) GetMatch(gameId string) *domain.Game {
-	// g, ok := m.gameinfo[gameId]
-	// if !ok {
-	// 	return nil
-	// }
-	// return g
-	return &domain.Game{}
 }
 
 // ランダムなIDを生成する
