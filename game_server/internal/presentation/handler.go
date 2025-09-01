@@ -46,29 +46,29 @@ func (rh *GameRequestHandler) CreateGame(ctx *gin.Context) {
 }
 
 func (rh *GameRequestHandler) JoinGame(ctx *gin.Context) {
-	// input := dto.CreateGameInput{}
-	// err := ctx.ShouldBindJSON(&input)
-	// if err != nil {
-	// 	ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-	// 	return
-	// }
-	// gameId := ctx.Param("gameId")
+	input := dto.CreateGameInput{}
+	err := ctx.ShouldBindJSON(&input)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	gameId := ctx.Param("gameId")
 
-	// ch := make(chan usecase.Reply, 1)
-	// cm := &usecase.JoinCommand{
-	// 	GameId:     gameId,
-	// 	PlayerName: input.Player,
-	// 	Reply:      ch,
-	// }
-	// rh.match.ExecuteCommand(cm)
-	// result := <-cm.Reply
-	// if result.Err != nil {
-	// 	if result.Err.Error() == "game match not exist" {
-	// 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": result.Err.Error()})
-	// 		return
-	// 	}
-	// }
-	// ctx.JSON(http.StatusOK, gin.H{"gameId": gameId, "playerId": result.Result})
+	ch := make(chan usecase.Reply, 1)
+	cm := &usecase.JoinCommand{
+		GameId:     gameId,
+		PlayerName: input.Player,
+		Reply:      ch,
+	}
+	rh.matchManeger.ExecuteCommand(gameId, cm)
+	result := <-cm.Reply
+	if result.Err != nil {
+		if result.Err.Error() == "game match not exist" {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": result.Err.Error()})
+			return
+		}
+	}
+	ctx.JSON(http.StatusOK, gin.H{"gameId": gameId, "playerId": result.Result})
 }
 
 // オセロを動かす処理のエンドポイント

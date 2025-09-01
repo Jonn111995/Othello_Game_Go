@@ -160,81 +160,50 @@ func (m *GameMatch) broadcast(e Event) {
 }
 
 func (m *GameMatch) gameLoop(id string) {
-	// for {
-	// 	// TODO コマンドが増えたら実装
-	// 	//select {
-	// 	cmd := <-m.cmd
-	// 	switch c := cmd.(type) {
-	// 	case *JoinCommand:
-	// 		if match, ok := m.gameinfo[c.GameId]; !ok {
-	// 			c.Reply <- Reply{Err: errors.New("game match not exist")}
-	// 		} else {
-	// 			c.Match = match
-	// 			c.execute()
-	// 			game := make(map[string]*domain.Game)
-	// 			game["game"] = m.gameinfo[id].Clone()
-	// 			m.broadcast(Event{Event: "state", Payload: game})
-	// 		}
-	// 	// オセロを動かす分岐
-	// 	case *MoveCommand:
-	// 		if match, ok := m.gameinfo[c.GameId]; !ok {
-	// 			c.Reply <- Reply{Err: errors.New("game match not exist")}
-	// 		} else {
-	// 			c.Match = match
-	// 			// オセロを動かす処理の実行
-	// 			c.execute()
-	// 			// クライアントにオセロの移動情報とゲームの状態を同期する
-	// 			m.broadcast(Event{Event: "move",
-	// 				Payload: map[string]any{
-	// 					"player_id": c.PlayerId,
-	// 					"x":         c.X,
-	// 					"y":         c.Y,
-	// 				}})
-	// 			log.Printf("game loop board: %v", *m.gameinfo[id].Clone())
-	// 			m.broadcast(Event{Event: "state",
-	// 				Payload: *m.gameinfo[id].Clone(),
-	// 			})
-	// 			c.Reply <- Reply{Err: nil}
-	// 		}
-	// 	case *StateRequest:
-	// 		log.Printf("state request gameloop: %v", m.gameinfo[id].Clone())
-	// 		c.Reply <- m.gameinfo[id].Clone()
-	// 	default:
-	// 		log.Printf("game looping default")
-	// 	}
-	// 	log.Printf("game looping session id : %s\n", m.gameinfo[id].ID)
-	// }
-	log.Printf("game looping default")
+	for {
+		// TODO コマンドが増えたら実装
+		//select {
+		cmd := <-m.cmd
+		switch c := cmd.(type) {
+		case *JoinCommand:
+			c.Match = m.gameinfo
+			c.execute()
+			game := make(map[string]*domain.Game)
+			game["game"] = m.gameinfo.Clone()
+			m.broadcast(Event{Event: "state", Payload: game})
+		// オセロを動かす分岐
+		// case *MoveCommand:
+		// 	if match, ok := m.gameinfo[c.GameId]; !ok {
+		// 		c.Reply <- Reply{Err: errors.New("game match not exist")}
+		// 	} else {
+		// 		c.Match = match
+		// 		// オセロを動かす処理の実行
+		// 		c.execute()
+		// 		// クライアントにオセロの移動情報とゲームの状態を同期する
+		// 		m.broadcast(Event{Event: "move",
+		// 			Payload: map[string]any{
+		// 				"player_id": c.PlayerId,
+		// 				"x":         c.X,
+		// 				"y":         c.Y,
+		// 			}})
+		// 		log.Printf("game loop board: %v", *m.gameinfo[id].Clone())
+		// 		m.broadcast(Event{Event: "state",
+		// 			Payload: *m.gameinfo[id].Clone(),
+		// 		})
+		// 		c.Reply <- Reply{Err: nil}
+		// 	}
+		// case *StateRequest:
+		// 	log.Printf("state request gameloop: %v", m.gameinfo[id].Clone())
+		// 	c.Reply <- m.gameinfo[id].Clone()
+		default:
+			log.Printf("game looping default")
+		}
+		log.Printf("game looping session id : %s\n", m.gameinfo.ID)
+	}
 }
 
 func (m *GameMatch) ExecuteCommand(command ICommand) {
-	// switch c := command.(type) {
-	// case *JoinCommand:
-	// 	if v, ok := m.cmd[c.GameId]; !ok {
-	// 		c.Reply <- Reply{Err: errors.New("game match not exist")}
 
-	// 	} else {
-	// 		v <- c
-	// 	}
-	// case *MoveCommand:
-	// 	if v, ok := m.cmd[c.GameId]; !ok {
-	// 		c.Reply <- Reply{Err: errors.New("game match not exist")}
-	// 	} else {
-	// 		v <- c
-	// 	}
-	// case *StateRequest:
-	// 	if v, ok := m.cmd[c.GameId]; !ok {
-	// 		log.Println("state request nil")
-	// 		c.Reply <- nil
-
-	// 	} else {
-	// 		log.Println("state request else")
-	// 		v <- c
-
-	// 	}
-	// default:
-	// 	log.Println("execute command default")
-	// }
 }
 
 func (m *GameMatch) GetMatch(gameId string) *domain.Game {

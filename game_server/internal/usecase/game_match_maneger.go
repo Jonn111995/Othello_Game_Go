@@ -9,7 +9,7 @@ import (
 type IGameMatchManeger interface {
 	CreateGameMatch(playerName string) (playerId, gameId string, err error)
 	StartGameMatch(gameId string) error
-	ExecuteCommand(gameId string, command ICommand)
+	ExecuteCommand(gameId string, command ICommand) error
 }
 
 type GameMatchManeger struct {
@@ -20,8 +20,13 @@ func NewGameMatchManeger() IGameMatchManeger {
 	return &GameMatchManeger{gameMatches: make(map[string]*GameMatch)}
 }
 
-func (gm *GameMatchManeger) ExecuteCommand(gameId string, command ICommand) {
-
+func (gm *GameMatchManeger) ExecuteCommand(gameId string, command ICommand) error {
+	if match, ok := gm.gameMatches[gameId]; !ok {
+		return errors.New("not exist game match")
+	} else {
+		match.cmd <- command
+		return nil
+	}
 }
 
 func (gm *GameMatchManeger) CreateGameMatch(playerName string) (playerId, gameId string, err error) {
