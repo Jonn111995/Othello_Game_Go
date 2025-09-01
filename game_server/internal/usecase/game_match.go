@@ -172,26 +172,22 @@ func (m *GameMatch) gameLoop(id string) {
 			game["game"] = m.gameinfo.Clone()
 			m.broadcast(Event{Event: "state", Payload: game})
 		// オセロを動かす分岐
-		// case *MoveCommand:
-		// 	if match, ok := m.gameinfo[c.GameId]; !ok {
-		// 		c.Reply <- Reply{Err: errors.New("game match not exist")}
-		// 	} else {
-		// 		c.Match = match
-		// 		// オセロを動かす処理の実行
-		// 		c.execute()
-		// 		// クライアントにオセロの移動情報とゲームの状態を同期する
-		// 		m.broadcast(Event{Event: "move",
-		// 			Payload: map[string]any{
-		// 				"player_id": c.PlayerId,
-		// 				"x":         c.X,
-		// 				"y":         c.Y,
-		// 			}})
-		// 		log.Printf("game loop board: %v", *m.gameinfo[id].Clone())
-		// 		m.broadcast(Event{Event: "state",
-		// 			Payload: *m.gameinfo[id].Clone(),
-		// 		})
-		// 		c.Reply <- Reply{Err: nil}
-		// 	}
+		case *MoveCommand:
+			c.Match = m.gameinfo
+			// オセロを動かす処理の実行
+			c.execute()
+			// クライアントにオセロの移動情報とゲームの状態を同期する
+			// m.broadcast(Event{Event: "move",
+			// 	Payload: map[string]any{
+			// 		"player_id": c.PlayerId,
+			// 		"x":         c.X,
+			// 		"y":         c.Y,
+			// 	}})
+			// log.Printf("game loop board: %v", *m.gameinfo.Clone())
+			// m.broadcast(Event{Event: "state",
+			// 	Payload: *m.gameinfo.Clone(),
+			// })
+			c.Reply <- Reply{Err: nil}
 		// case *StateRequest:
 		// 	log.Printf("state request gameloop: %v", m.gameinfo[id].Clone())
 		// 	c.Reply <- m.gameinfo[id].Clone()
