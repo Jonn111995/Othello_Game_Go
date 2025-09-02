@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"othello_game_go/internal/domain"
+	"sync"
 )
 
 type IGameMatchManeger interface {
@@ -17,6 +18,7 @@ type IGameMatchManeger interface {
 
 type GameMatchManeger struct {
 	gameMatches map[string]*GameMatch
+	mu          sync.RWMutex
 }
 
 func NewGameMatchManeger() IGameMatchManeger {
@@ -24,6 +26,8 @@ func NewGameMatchManeger() IGameMatchManeger {
 }
 
 func (gm *GameMatchManeger) ExecuteCommand(gameId string, command ICommand) error {
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
 	if match, ok := gm.gameMatches[gameId]; !ok {
 		return errors.New("not exist game match")
 	} else {
@@ -33,7 +37,6 @@ func (gm *GameMatchManeger) ExecuteCommand(gameId string, command ICommand) erro
 }
 
 func (gm *GameMatchManeger) CreateGameMatch(playerName string) (gameId, playerId string, err error) {
-
 	gameInfo, pId := gm.createGameInfo(playerName)
 	gameMatch := NewGameMatch(gameInfo)
 	if err := gm.addGameMatch(gameMatch); err != nil {
@@ -47,7 +50,8 @@ func (gm *GameMatchManeger) CreateGameMatch(playerName string) (gameId, playerId
 
 // ゲームマッチを開始し、リクエストを受け付ける
 func (gm *GameMatchManeger) StartGameMatch(gameId string) error {
-
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
 	if match, ok := gm.gameMatches[gameId]; !ok {
 		return errors.New("not exist game match")
 	} else {
@@ -57,6 +61,8 @@ func (gm *GameMatchManeger) StartGameMatch(gameId string) error {
 }
 
 func (gm *GameMatchManeger) GetMatch(gameId string) *GameMatch {
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
 	g, ok := gm.gameMatches[gameId]
 	if !ok {
 		return nil
@@ -65,7 +71,8 @@ func (gm *GameMatchManeger) GetMatch(gameId string) *GameMatch {
 }
 
 func (gm *GameMatchManeger) SetSubscribe(gameId string) (*chan Event, error) {
-
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
 	if match, ok := gm.gameMatches[gameId]; !ok {
 		return nil, errors.New("not exist game match")
 	} else {
@@ -76,6 +83,8 @@ func (gm *GameMatchManeger) SetSubscribe(gameId string) (*chan Event, error) {
 }
 
 func (gm *GameMatchManeger) RemoveSubscribe(gameId string, evCh *chan Event) error {
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
 	if match, ok := gm.gameMatches[gameId]; !ok {
 		return errors.New("not exist game match")
 	} else {
@@ -115,8 +124,9 @@ func (gm *GameMatchManeger) addGameMatch(match IGameMatch) error {
 		if _, ok := gm.gameMatches[m.gameinfo.ID]; ok {
 			return errors.New("already exist game match")
 		}
-
+		gm.mu.Lock()
 		gm.gameMatches[m.gameinfo.ID] = m
+		gm.mu.Unlock()
 		return nil
 	default:
 		return errors.New("not exist kind og IGameMatch Interface")

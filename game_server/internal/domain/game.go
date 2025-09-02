@@ -32,12 +32,10 @@ func (g *Game) Clone() *Game {
 	ng := &Game{
 		ID:      g.ID,
 		Players: map[string]Player{},
-		Board:   [8][8]Color{},
+		Board:   g.Board,
 		Turn:    g.Turn,
 		Status:  g.Status,
 	}
-	ng.Board = g.Board
-
 	// playerの情報を書き換えられないように値コピーする
 	for k, v := range g.Players {
 		ng.Players[k] = v

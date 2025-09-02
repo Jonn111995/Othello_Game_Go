@@ -31,11 +31,6 @@ func (ws *WebsocketHandler) ServeWS(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "gameId is required"})
 		return
 	}
-	gameMatch := ws.matchManeger.GetMatch(gameId)
-	if gameMatch == nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "gameMatch not exist"})
-		return
-	}
 	// HTTP接続をWebsocketにアップグレードする
 	conn, err := ws.upgrader.Upgrade(ctx.Writer, ctx.Request, nil)
 	if err != nil {
