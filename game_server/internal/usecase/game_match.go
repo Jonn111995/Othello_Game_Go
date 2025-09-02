@@ -11,7 +11,7 @@ import (
 )
 
 type IGameMatch interface {
-	ExecuteCommand(command ICommand)
+	GameLoop(id string)
 	Subscribe(ch chan Event)
 	UnSubscribe(ch chan Event)
 }
@@ -158,7 +158,7 @@ func (m *GameMatch) broadcast(e Event) {
 	}
 }
 
-func (m *GameMatch) gameLoop(id string) {
+func (m *GameMatch) GameLoop(id string) {
 	for {
 		// TODO コマンドが増えたら実装
 		//select {
@@ -195,10 +195,6 @@ func (m *GameMatch) gameLoop(id string) {
 		}
 		log.Printf("game looping session id : %s\n", m.gameinfo.ID)
 	}
-}
-
-func (m *GameMatch) ExecuteCommand(command ICommand) {
-
 }
 
 // ランダムなIDを生成する

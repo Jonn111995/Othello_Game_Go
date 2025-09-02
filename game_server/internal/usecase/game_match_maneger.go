@@ -7,8 +7,10 @@ import (
 )
 
 type IGameMatchManeger interface {
-	CreateGameMatch(playerName string) (playerId, gameId string, err error)
+	CreateGameMatch(playerName string) (gameId, playerId string, err error)
 	StartGameMatch(gameId string) error
+	SetSubscribe(gameId string) (*chan Event, error)
+	RemoveSubscribe(gameId string, evCh *chan Event) error
 	ExecuteCommand(gameId string, command ICommand) error
 	GetMatch(gameId string) *GameMatch
 }
@@ -30,7 +32,7 @@ func (gm *GameMatchManeger) ExecuteCommand(gameId string, command ICommand) erro
 	}
 }
 
-func (gm *GameMatchManeger) CreateGameMatch(playerName string) (playerId, gameId string, err error) {
+func (gm *GameMatchManeger) CreateGameMatch(playerName string) (gameId, playerId string, err error) {
 
 	gameInfo, pId := gm.createGameInfo(playerName)
 	gameMatch := NewGameMatch(gameInfo)
@@ -49,7 +51,7 @@ func (gm *GameMatchManeger) StartGameMatch(gameId string) error {
 	if match, ok := gm.gameMatches[gameId]; !ok {
 		return errors.New("not exist game match")
 	} else {
-		go match.gameLoop(gameId)
+		go match.GameLoop(gameId)
 		return nil
 	}
 }
@@ -60,6 +62,27 @@ func (gm *GameMatchManeger) GetMatch(gameId string) *GameMatch {
 		return nil
 	}
 	return g
+}
+
+func (gm *GameMatchManeger) SetSubscribe(gameId string) (*chan Event, error) {
+
+	if match, ok := gm.gameMatches[gameId]; !ok {
+		return nil, errors.New("not exist game match")
+	} else {
+		evCh := make(chan Event, 128)
+		match.Subscribe(evCh)
+		return &evCh, nil
+	}
+}
+
+func (gm *GameMatchManeger) RemoveSubscribe(gameId string, evCh *chan Event) error {
+	if match, ok := gm.gameMatches[gameId]; !ok {
+		return errors.New("not exist game match")
+	} else {
+		evCh := make(chan Event, 128)
+		match.UnSubscribe(evCh)
+		return nil
+	}
 }
 
 // ゲームの状態構造体を作成する

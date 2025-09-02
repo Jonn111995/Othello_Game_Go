@@ -8,9 +8,9 @@ import (
 )
 
 func main() {
-	gameMath := usecase.NewGameMatchManeger()
-	gameRequestHandler := presentation.NewGameRequestHandler(gameMath)
-	websocket := presentation.NewWebsocketHandler(gameMath)
+	gameMatchManeger := usecase.NewGameMatchManeger()
+	gameRequestHandler := presentation.NewGameRequestHandler(gameMatchManeger)
+	websocket := presentation.NewWebsocketHandler(gameMatchManeger)
 	r := gin.Default()
 
 	r.POST("/create", gameRequestHandler.CreateGame)

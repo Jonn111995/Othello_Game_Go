@@ -31,13 +31,11 @@ func (ws *WebsocketHandler) ServeWS(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "gameId is required"})
 		return
 	}
-
 	gameMatch := ws.matchManeger.GetMatch(gameId)
-	if gameMatch != nil {
+	if gameMatch == nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "gameMatch not exist"})
 		return
 	}
-
 	// HTTP接続をWebsocketにアップグレードする
 	conn, err := ws.upgrader.Upgrade(ctx.Writer, ctx.Request, nil)
 	if err != nil {
@@ -45,16 +43,20 @@ func (ws *WebsocketHandler) ServeWS(ctx *gin.Context) {
 		return
 	}
 
-	evCh := make(chan usecase.Event, 128)
-	gameMatch.Subscribe(evCh)
+	subscribedCh, err := ws.matchManeger.SetSubscribe(gameId)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	defer func() {
-		gameMatch.UnSubscribe(evCh)
-		close(evCh)
+		ws.matchManeger.RemoveSubscribe(gameId, subscribedCh)
+		close(*subscribedCh)
 		conn.Close()
 	}()
 
 	rc := make(chan *domain.Game, 1)
-	gameMatch.ExecuteCommand(&usecase.StateRequest{GameId: gameId, Reply: rc})
+	ws.matchManeger.ExecuteCommand(gameId, &usecase.StateRequest{GameId: gameId, Reply: rc})
 	if gameinfo := <-rc; gameinfo != nil {
 		log.Println("serveWS gameinfo")
 		log.Printf("serveWS: %v", gameinfo)
@@ -62,7 +64,7 @@ func (ws *WebsocketHandler) ServeWS(ctx *gin.Context) {
 	}
 
 	// usecase層からのチャネルに対するデータの送信をポーリングし続ける
-	for ev := range evCh {
+	for ev := range *subscribedCh {
 		log.Printf("serveWS: %v", ev)
 		// JSON にエンコードして送る。小さな最適化のために json.Marshal を使っている
 		b, _ := json.Marshal(ev)
