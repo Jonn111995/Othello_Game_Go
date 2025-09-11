@@ -2,7 +2,9 @@ package client
 
 import (
 	"image/color"
+	"sync"
 
+	"github.com/gorilla/websocket"
 	"github.com/hajimehoshi/ebiten"
 	"github.com/hajimehoshi/ebiten/ebitenutil"
 	"github.com/hajimehoshi/ebiten/inpututil"
@@ -11,6 +13,13 @@ import (
 type Game struct {
 	state     *ClientState
 	serverURL string
+
+	// チャットを送るために必要なコネクションの変数
+	wsConn *websocket.Conn
+	// websocketにメッセージを書き込む場合に競合を防ぐ
+	wsMutex sync.Mutex
+	// ユーザーが入力中の文字を保持しておく
+	chatBuffer string
 }
 
 func NewGame(newstate *ClientState, serverURL string) *Game {
@@ -31,6 +40,28 @@ func (g *Game) Update(screen *ebiten.Image) error {
 		if cellX >= 0 && cellX < 8 && cellY >= 0 && cellY < 8 {
 			PostMoveAsync(g.serverURL, g.state.gameID, g.state.playerID, cellX, cellY)
 		}
+	}
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
+		if g.chatBuffer != "" {
+			buf := g.chatBuffer
+			go func(text string) {
+				if g.wsConn == nil {
+					return
+				}
+				// ロックして、メッセージを書き込む
+				g.wsMutex.Lock()
+				defer g.wsMutex.Unlock()
+				g.wsConn.WriteJSON(map[string]any{"type": "chat", "text": text})
+			}(buf)
+			sendMessage := ChatMessage{From: "Player", Text: buf}
+			g.state.AddChat(sendMessage)
+			g.chatBuffer = ""
+		}
+	}
+
+	for _, r := range ebiten.InputChars() {
+		g.chatBuffer += string(r)
 	}
 	return nil
 }
@@ -57,6 +88,19 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			}
 		}
 	}
+
+	chats := g.state.GetChatsClone()
+	max := 8
+	if len(chats) < max {
+		max = len(chats)
+	}
+	startY := 16
+	for i := 0; i < max; i++ {
+		m := chats[len(chats)-max+i]
+		ebitenutil.DebugPrintAt(screen, m.From+": "+m.Text, 8, (startY + i*16))
+	}
+	ebitenutil.DebugPrintAt(screen, "> "+g.chatBuffer, 8, (8*64 - 24))
+
 	// draw simple HUD: game id and player id
 }
 

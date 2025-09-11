@@ -8,6 +8,11 @@ import (
 // 盤面を表す型定義
 type Board [8][8]int
 
+type ChatMessage struct {
+	From string `json:"from"`
+	Text string `json:"text"`
+}
+
 // マッチに関する情報を保持する
 type ClientState struct {
 	// boardはEbitのDraw関数とWSReaderでboardの更新をするときなど、
@@ -18,6 +23,9 @@ type ClientState struct {
 	turn     string
 	gameID   string
 	playerID string
+
+	chats         []ChatMessage // チャットを保存する
+	maxStoreChats int           // 最大チャット保持数
 }
 
 func NewClientState() *ClientState {
@@ -63,4 +71,22 @@ func (cs *ClientState) GetBoardClone() Board {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	return cs.board
+}
+
+func (cs *ClientState) AddChat(newChat ChatMessage) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	if cs.maxStoreChats < len(cs.chats) {
+		vacancyChats := cs.chats[1:]
+		cs.chats = append(vacancyChats, newChat)
+	}
+	cs.chats = append(cs.chats, newChat)
+}
+
+func (cs *ClientState) GetChatsClone() []ChatMessage {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	outChats := make([]ChatMessage, len(cs.chats))
+	copy(outChats, cs.chats)
+	return outChats
 }
