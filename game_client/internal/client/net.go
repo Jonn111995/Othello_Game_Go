@@ -93,10 +93,10 @@ func WSReader(conn *websocket.Conn, game *ClientState) {
 		}
 		log.Printf("m = %v", m)
 		if t, ok := m["type"].(string); ok {
-			switch t {
-			case "state":
-				if g, ok := m["payload"].(map[string]any); ok {
-					log.Printf("payload = %v\n", m["payload"])
+			if g, ok := m["payload"].(map[string]any); ok {
+				log.Printf("payload = %v\n", m["payload"])
+				switch t {
+				case "state":
 					// オセロ盤面の更新
 					var tempboard Board
 					if b, ok := g["board"].([]interface{}); ok {
@@ -140,9 +140,20 @@ func WSReader(conn *websocket.Conn, game *ClientState) {
 						log.Println("WSReader: turn not exist")
 					}
 					game.UpdateBoard(tempboard, tempplayers, tempturn)
-				} else {
-					log.Println("WSReader: payload not exist")
+				case "chat":
+					if from, ok := g["from"].(string); ok {
+						if text, ok := g["text"].(string); ok {
+							chat := ChatMessage{From: from, Text: text}
+							game.AddChat(chat)
+							log.Printf("chat = %v", game.chats)
+
+						}
+					}
+				default:
+					log.Println("unknown ws message type:", t)
 				}
+			} else {
+				log.Println("WSReader: payload not exist")
 			}
 		}
 	}

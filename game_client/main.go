@@ -76,8 +76,8 @@ func main() {
 	signal.Notify(c, os.Interrupt)
 	go func() { <-c; conn.Close(); os.Exit(0) }()
 
-	game := client.NewGame(gamestate, serverURL)
-	ebiten.SetWindowSize(320, 240)
+	game := client.NewGame(gamestate, serverURL, name, conn)
+	ebiten.SetWindowSize(640, 480) // 文字が見づらいので大きい画面に変更
 	ebiten.RunGame(game)
 }
 

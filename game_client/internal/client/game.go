@@ -2,31 +2,74 @@ package client
 
 import (
 	"image/color"
+	"log"
+	"os"
 	"sync"
 
 	"github.com/gorilla/websocket"
 	"github.com/hajimehoshi/ebiten"
 	"github.com/hajimehoshi/ebiten/ebitenutil"
 	"github.com/hajimehoshi/ebiten/inpututil"
+	"github.com/hajimehoshi/ebiten/text"
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/opentype"
 )
 
 type Game struct {
 	state     *ClientState
 	serverURL string
 
+	// プレイヤーの名前 チャット送信する際に表示する
+	playerName string
 	// チャットを送るために必要なコネクションの変数
 	wsConn *websocket.Conn
 	// websocketにメッセージを書き込む場合に競合を防ぐ
 	wsMutex sync.Mutex
 	// ユーザーが入力中の文字を保持しておく
 	chatBuffer string
+
+	// 日本語を表示する際に必要な変数
+	fontFace font.Face
 }
 
-func NewGame(newstate *ClientState, serverURL string) *Game {
-	return &Game{
-		state:     newstate,
-		serverURL: serverURL,
+// フォントファイルを読み込む
+func loadFont(path string, size float64) font.Face {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		log.Println("font load error (file not found):", err)
+		return nil
 	}
+
+	f, err := opentype.Parse(b)
+	if err != nil {
+		log.Println("font parse error:", err)
+		return nil
+	}
+
+	faceOptions := opentype.FaceOptions{
+		Size:    size,
+		DPI:     72,
+		Hinting: font.HintingFull,
+	}
+	face, err := opentype.NewFace(f, &faceOptions)
+	if err != nil {
+		log.Println("font newface error:", err)
+		return nil
+	}
+	return face
+}
+
+func NewGame(newstate *ClientState, serverURL string, playerName string, wsConn *websocket.Conn) *Game {
+	game := &Game{
+		state:      newstate,
+		serverURL:  serverURL,
+		playerName: playerName,
+		wsConn:     wsConn,
+	}
+	if face := loadFont("assets/NotoSansJP-VariableFont_wght.ttf", 14); face != nil {
+		game.fontFace = face
+	}
+	return game
 }
 
 func (g *Game) Update(screen *ebiten.Image) error {
@@ -42,6 +85,7 @@ func (g *Game) Update(screen *ebiten.Image) error {
 		}
 	}
 
+	// チャットの送信
 	if inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
 		if g.chatBuffer != "" {
 			buf := g.chatBuffer
@@ -52,14 +96,25 @@ func (g *Game) Update(screen *ebiten.Image) error {
 				// ロックして、メッセージを書き込む
 				g.wsMutex.Lock()
 				defer g.wsMutex.Unlock()
-				g.wsConn.WriteJSON(map[string]any{"type": "chat", "text": text})
+				g.wsConn.WriteJSON(map[string]any{"type": "chat", "from": g.playerName, "text": text})
 			}(buf)
-			sendMessage := ChatMessage{From: "Player", Text: buf}
+			sendMessage := ChatMessage{From: g.playerName, Text: buf}
 			g.state.AddChat(sendMessage)
 			g.chatBuffer = ""
 		}
 	}
 
+	// 入力文字の削除
+	if inpututil.IsKeyJustPressed(ebiten.KeyBackspace) {
+		if g.chatBuffer != "" {
+			runes := []rune(g.chatBuffer)
+			if len(runes) > 0 {
+				g.chatBuffer = string(runes[:len(runes)-1])
+			}
+		}
+	}
+
+	// 入力された文字を保存していく
 	for _, r := range ebiten.InputChars() {
 		g.chatBuffer += string(r)
 	}
@@ -97,9 +152,21 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	startY := 16
 	for i := 0; i < max; i++ {
 		m := chats[len(chats)-max+i]
-		ebitenutil.DebugPrintAt(screen, m.From+": "+m.Text, 8, (startY + i*16))
+		textLine := m.From + ": " + m.Text
+
+		if g.fontFace != nil {
+			text.Draw(screen, textLine, g.fontFace, 8, (startY + i*16), color.White)
+		} else {
+			ebitenutil.DebugPrintAt(screen, textLine, 8, (startY + i*16))
+		}
 	}
-	ebitenutil.DebugPrintAt(screen, "> "+g.chatBuffer, 8, (8*64 - 24))
+
+	inputLine := "> " + g.chatBuffer
+	if g.fontFace != nil {
+		text.Draw(screen, inputLine, g.fontFace, 8, (8*64 - 24), color.White)
+	} else {
+		ebitenutil.DebugPrintAt(screen, inputLine, 8, (8*64 - 24))
+	}
 
 	// draw simple HUD: game id and player id
 }

@@ -29,7 +29,13 @@ type ClientState struct {
 }
 
 func NewClientState() *ClientState {
-	return &ClientState{players: map[string]string{}}
+	return &ClientState{
+		players: map[string]string{},
+		// 保持しているチャット
+		chats: []ChatMessage{},
+		// チャットの最大保持数
+		maxStoreChats: 100,
+	}
 }
 
 func (cs *ClientState) UpdateBoard(b Board, p map[string]string, turn string) {
@@ -76,9 +82,12 @@ func (cs *ClientState) GetBoardClone() Board {
 func (cs *ClientState) AddChat(newChat ChatMessage) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
-	if cs.maxStoreChats < len(cs.chats) {
+	// 最大保持数が0の場合はここのifが真になり、スライスの操作で落ちる
+	// (その時点ではスライスにはなにも入ってないのでnullポインタにアクセスしてしまう)
+	if cs.maxStoreChats <= len(cs.chats) {
 		vacancyChats := cs.chats[1:]
 		cs.chats = append(vacancyChats, newChat)
+		return
 	}
 	cs.chats = append(cs.chats, newChat)
 }
