@@ -2,6 +2,8 @@ package client
 
 import (
 	"bytes"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"game_client/internal/client/dto"
 	"log"
@@ -140,12 +142,24 @@ func WSReader(conn *websocket.Conn, game *ClientState) {
 						log.Println("WSReader: turn not exist")
 					}
 					game.UpdateBoard(tempboard, tempplayers, tempturn)
+				// 別クライアントから受け取ったチャットを処理する
 				case "chat":
 					if from, ok := g["from"].(string); ok {
+						log.Println("from")
 						if text, ok := g["text"].(string); ok {
-							chat := ChatMessage{From: from, Text: text}
-							game.AddChat(chat)
-							log.Printf("chat = %v", game.chats)
+							log.Println("teext")
+							if id, ok := g["id"].(string); ok {
+								log.Println("id")
+								if id != "" && game.HasSeenId(id) {
+									log.Println("received chat is existed")
+								} else {
+									log.Print("addchat client")
+
+									chat := ChatMessage{Id: id, From: from, Text: text}
+									game.AddChatWithId(chat)
+									log.Printf("chat = %v", game.chats)
+								}
+							}
 
 						}
 					}
@@ -157,4 +171,14 @@ func WSReader(conn *websocket.Conn, game *ClientState) {
 			}
 		}
 	}
+}
+
+func GenerateMessageId(n int) string {
+	if n <= 0 {
+		n = 8
+	}
+	b := make([]byte, n)
+	_, _ = rand.Read(b)
+	// エンコードしたあと、先頭から8文字までだけ返す
+	return hex.EncodeToString(b)[:n]
 }

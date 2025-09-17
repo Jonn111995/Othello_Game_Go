@@ -2,6 +2,7 @@ package client
 
 import (
 	"log"
+	"slices"
 	"sync"
 )
 
@@ -9,6 +10,7 @@ import (
 type Board [8][8]int
 
 type ChatMessage struct {
+	Id   string `json:"id", omitempty`
 	From string `json:"from"`
 	Text string `json:"text"`
 }
@@ -26,6 +28,7 @@ type ClientState struct {
 
 	chats         []ChatMessage // チャットを保存する
 	maxStoreChats int           // 最大チャット保持数
+	seenIds       []string
 }
 
 func NewClientState() *ClientState {
@@ -35,6 +38,8 @@ func NewClientState() *ClientState {
 		chats: []ChatMessage{},
 		// チャットの最大保持数
 		maxStoreChats: 100,
+		// 表示済みのチャットのid
+		seenIds: []string{},
 	}
 }
 
@@ -77,6 +82,54 @@ func (cs *ClientState) GetBoardClone() Board {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	return cs.board
+}
+
+func (cs *ClientState) HasSeenId(id string) bool {
+
+	if id == "" {
+		return false
+	}
+	cs.mu.RLock()
+	defer cs.mu.RUnlock()
+	b := slices.Contains(cs.seenIds, id)
+	log.Print("hasseen:", b)
+	return b
+}
+
+func (cs *ClientState) markedSeenId(id string) {
+	if id == "" {
+		return
+	}
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	log.Print("mark")
+	if cs.seenIds == nil {
+		cs.seenIds = make([]string, 0)
+	}
+
+	cs.seenIds = append(cs.seenIds, id)
+}
+
+func (cs *ClientState) AddChatWithId(newChat ChatMessage) {
+	cs.mu.Lock()
+	if slices.Contains(cs.seenIds, newChat.Id) {
+		return
+	}
+	log.Print("addchat")
+	// 最大保持数が0の場合はここのifが真になり、スライスの操作で落ちる
+	// (その時点ではスライスにはなにも入ってないのでnullポインタにアクセスしてしまう)
+	if cs.maxStoreChats <= len(cs.chats) {
+		log.Print("addchat slice")
+		vacancyChats := cs.chats[1:]
+		cs.chats = append(vacancyChats, newChat)
+		return
+	}
+	log.Print("append before")
+	cs.chats = append(cs.chats, newChat)
+	log.Print("append after")
+	cs.mu.Unlock()
+	// 重複チャットを表示しないように閲覧済みチャットとして一覧に保持する
+	cs.markedSeenId(newChat.Id)
 }
 
 func (cs *ClientState) AddChat(newChat ChatMessage) {

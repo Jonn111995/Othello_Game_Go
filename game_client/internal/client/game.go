@@ -89,6 +89,7 @@ func (g *Game) Update(screen *ebiten.Image) error {
 	if inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
 		if g.chatBuffer != "" {
 			buf := g.chatBuffer
+			msgId := GenerateMessageId(8)
 			go func(text string) {
 				if g.wsConn == nil {
 					return
@@ -96,10 +97,10 @@ func (g *Game) Update(screen *ebiten.Image) error {
 				// ロックして、メッセージを書き込む
 				g.wsMutex.Lock()
 				defer g.wsMutex.Unlock()
-				g.wsConn.WriteJSON(map[string]any{"type": "chat", "from": g.playerName, "text": text})
+				g.wsConn.WriteJSON(map[string]any{"type": "chat", "id": msgId, "from": g.playerName, "text": text})
 			}(buf)
-			sendMessage := ChatMessage{From: g.playerName, Text: buf}
-			g.state.AddChat(sendMessage)
+			sendMessage := ChatMessage{Id: msgId, From: g.playerName, Text: buf}
+			g.state.AddChatWithId(sendMessage)
 			g.chatBuffer = ""
 		}
 	}
