@@ -14,6 +14,7 @@ type IGameMatch interface {
 	GameLoop(id string)
 	Subscribe(ch chan Event)
 	UnSubscribe(ch chan Event)
+	PublishEvent(e Event)
 }
 
 type ICommand interface {
@@ -156,6 +157,10 @@ func (m *GameMatch) broadcast(e Event) {
 		default:
 		}
 	}
+}
+
+func (m *GameMatch) PublishEvent(e Event) {
+	m.broadcast(e)
 }
 
 func (m *GameMatch) GameLoop(id string) {

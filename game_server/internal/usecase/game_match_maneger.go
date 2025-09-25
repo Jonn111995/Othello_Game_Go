@@ -14,6 +14,7 @@ type IGameMatchManeger interface {
 	RemoveSubscribe(gameId string, evCh *chan Event) error
 	ExecuteCommand(gameId string, command ICommand) error
 	GetMatch(gameId string) *GameMatch
+	PublishEvent(gameId string, event Event) error
 }
 
 type GameMatchManeger struct {
@@ -90,6 +91,17 @@ func (gm *GameMatchManeger) RemoveSubscribe(gameId string, evCh *chan Event) err
 	} else {
 		evCh := make(chan Event, 128)
 		match.UnSubscribe(evCh)
+		return nil
+	}
+}
+
+func (gm *GameMatchManeger) PublishEvent(gameId string, event Event) error {
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
+	if match, ok := gm.gameMatches[gameId]; !ok {
+		return errors.New("not exist game match")
+	} else {
+		match.PublishEvent(event)
 		return nil
 	}
 }
