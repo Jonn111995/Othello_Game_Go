@@ -1,6 +1,7 @@
 package main
 
 import (
+	infra "othello_game_go/internal/infrastructure"
 	"othello_game_go/internal/presentation"
 	"othello_game_go/internal/usecase"
 
@@ -8,7 +9,8 @@ import (
 )
 
 func main() {
-	gameMatchManeger := usecase.NewGameMatchManeger()
+	gameRepository := infra.NewMemoryRepository()
+	gameMatchManeger := usecase.NewGameMatchManeger(gameRepository)
 	gameRequestHandler := presentation.NewGameRequestHandler(gameMatchManeger)
 	websocket := presentation.NewWebsocketHandler(gameMatchManeger)
 	r := gin.Default()

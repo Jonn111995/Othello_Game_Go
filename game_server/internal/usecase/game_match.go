@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"othello_game_go/internal/domain"
+	infra "othello_game_go/internal/infrastructure"
 	"strconv"
 	"sync"
 )
@@ -23,6 +24,7 @@ type ICommand interface {
 
 type GameMatch struct {
 	gameinfo    *domain.Game
+	repo        infra.IMemoryRepository
 	cmd         chan ICommand
 	mutex       sync.Mutex
 	subscribers []chan Event
@@ -38,8 +40,11 @@ type Reply struct {
 	Err    error
 }
 
-func NewGameMatch(gInfo *domain.Game) IGameMatch {
-	return &GameMatch{gameinfo: gInfo, cmd: make(chan ICommand)}
+func NewGameMatch(gInfo *domain.Game, repo infra.IMemoryRepository) IGameMatch {
+	return &GameMatch{
+		gameinfo: gInfo,
+		repo:     repo,
+		cmd:      make(chan ICommand)}
 }
 
 type JoinCommand struct {

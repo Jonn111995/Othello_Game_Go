@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"othello_game_go/internal/domain"
+	infra "othello_game_go/internal/infrastructure"
 	"sync"
 )
 
@@ -19,11 +20,15 @@ type IGameMatchManeger interface {
 
 type GameMatchManeger struct {
 	gameMatches map[string]*GameMatch
+	repo        infra.IMemoryRepository
 	mu          sync.RWMutex
 }
 
-func NewGameMatchManeger() IGameMatchManeger {
-	return &GameMatchManeger{gameMatches: make(map[string]*GameMatch)}
+func NewGameMatchManeger(repo infra.IMemoryRepository) IGameMatchManeger {
+	return &GameMatchManeger{
+		gameMatches: make(map[string]*GameMatch),
+		repo:        repo,
+	}
 }
 
 func (gm *GameMatchManeger) ExecuteCommand(gameId string, command ICommand) error {
@@ -39,10 +44,12 @@ func (gm *GameMatchManeger) ExecuteCommand(gameId string, command ICommand) erro
 
 func (gm *GameMatchManeger) CreateGameMatch(playerName string) (gameId, playerId string, err error) {
 	gameInfo, pId := gm.createGameInfo(playerName)
-	gameMatch := NewGameMatch(gameInfo)
+	gameMatch := NewGameMatch(gameInfo, gm.repo)
 	if err := gm.addGameMatch(gameMatch); err != nil {
 		return "", "", err
 	}
+
+	gm.repo.SaveGame(gameInfo)
 
 	log.Printf("Create Match for : %s\n", playerName)
 
@@ -127,6 +134,7 @@ func (gm *GameMatchManeger) createGameInfo(playerName string) (*domain.Game, str
 	return &gameinfo, pId
 }
 
+// 作成したGameMatchをマネージャーの管理するスライスに保存する
 func (gm *GameMatchManeger) addGameMatch(match IGameMatch) error {
 	switch m := match.(type) {
 	case *GameMatch:
