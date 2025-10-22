@@ -16,6 +16,8 @@ type IGameMatchManeger interface {
 	ExecuteCommand(gameId string, command ICommand) error
 	GetMatch(gameId string) *GameMatch
 	PublishEvent(gameId string, event Event) error
+	SaveChats(gameId string, chat domain.Chat) error
+	GetChats(gameId string) []*domain.Chat
 }
 
 type GameMatchManeger struct {
@@ -70,11 +72,11 @@ func (gm *GameMatchManeger) StartGameMatch(gameId string) error {
 
 func (gm *GameMatchManeger) GetMatch(gameId string) *GameMatch {
 	gm.mu.RLock()
-	defer gm.mu.RUnlock()
 	g, ok := gm.gameMatches[gameId]
 	if !ok {
 		return nil
 	}
+	gm.mu.RUnlock()
 	return g
 }
 
@@ -111,6 +113,22 @@ func (gm *GameMatchManeger) PublishEvent(gameId string, event Event) error {
 		match.PublishEvent(event)
 		return nil
 	}
+}
+
+func (gm *GameMatchManeger) SaveChats(gameId string, chat domain.Chat) error {
+	match := gm.GetMatch(gameId)
+	if match == nil {
+		return nil
+	}
+	return gm.repo.SaveChats(gameId, &chat)
+}
+
+func (gm *GameMatchManeger) GetChats(gameId string) []*domain.Chat {
+	match := gm.GetMatch(gameId)
+	if match == nil {
+		return nil
+	}
+	return gm.repo.GetChats(gameId)
 }
 
 // ゲームの状態構造体を作成する

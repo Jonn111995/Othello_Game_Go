@@ -141,15 +141,19 @@ func (ws *WebsocketHandler) ServeWS(ctx *gin.Context) {
 				switch t {
 				case "chat":
 					var event usecase.Event
+					var chat domain.Chat
 					if from, ok := m["from"].(string); ok {
 						if text, ok := m["text"].(string); ok {
 							if id, ok := m["id"].(string); ok {
 								event = usecase.Event{Event: t, Payload: map[string]string{"id": id, "from": from, "text": text}}
+								chat = domain.Chat{From: from, Id: id, Text: text}
 							}
 						}
 					}
 					// マッチマネージャーを介して、メッセージを送信する
 					ws.matchManeger.PublishEvent(gameId, event)
+					// チャットをリポジトリに保存する
+					ws.matchManeger.SaveChats(gameId, chat)
 				default:
 
 				}

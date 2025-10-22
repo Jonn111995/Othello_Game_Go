@@ -3,6 +3,7 @@ package presentation
 import (
 	"log"
 	"net/http"
+	"othello_game_go/internal/domain"
 	"othello_game_go/internal/dto"
 	"othello_game_go/internal/usecase"
 
@@ -14,6 +15,7 @@ type IGameRequestHandler interface {
 	JoinGame(ctx *gin.Context)
 	MoveOthello(ctx *gin.Context)
 	GetGameState(ctx *gin.Context)
+	GetChats(ctx *gin.Context)
 }
 
 type GameRequestHandler struct {
@@ -104,6 +106,36 @@ func (rh *GameRequestHandler) MoveOthello(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"move gid": gameId, "move pid": input.PlayerId, "X": input.X, "Y": input.Y})
+}
+
+func (rh *GameRequestHandler) GetChats(ctx *gin.Context) {
+	gameId := ctx.Param("gameId")
+	if gameId == "" {
+		log.Print("game id require")
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "gameId is required"})
+		return
+	}
+
+	// var input dto.GetChatsInput
+	// err := ctx.BindJSON(input)
+	// if err != nil {
+	// 	log.Print("err should bind")
+	// 	ctx.JSON(http.StatusBadRequest, gin.H{"error": "gameID is required"})
+	// 	return
+	// }
+
+	// とってきたチャットをどうやってクライアントに戻すか
+	chats := rh.matchManeger.GetChats(gameId)
+	if chats == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "chats is exist"})
+		return
+	}
+	chatsSlice := make([]domain.Chat, 0)
+	for _, chat := range chats {
+		chatsSlice = append(chatsSlice, *chat)
+	}
+	ctx.JSON(http.StatusOK, chatsSlice)
+
 }
 
 func (rh *GameRequestHandler) GetGameState(ctx *gin.Context) {

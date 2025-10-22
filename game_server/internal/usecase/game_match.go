@@ -24,7 +24,7 @@ type ICommand interface {
 
 type GameMatch struct {
 	gameinfo    *domain.Game
-	repo        infra.IMemoryRepository
+	repo        infra.IMemoryRepositoryOnlySave
 	cmd         chan ICommand
 	mutex       sync.Mutex
 	subscribers []chan Event
@@ -40,7 +40,7 @@ type Reply struct {
 	Err    error
 }
 
-func NewGameMatch(gInfo *domain.Game, repo infra.IMemoryRepository) IGameMatch {
+func NewGameMatch(gInfo *domain.Game, repo infra.IMemoryRepositoryOnlySave) IGameMatch {
 	return &GameMatch{
 		gameinfo: gInfo,
 		repo:     repo,
@@ -130,6 +130,9 @@ func (mc *MoveCommand) execute() {
 	}(mc.Match, p.ID)
 }
 
+type GetChatsCommand struct {
+}
+
 func (m *GameMatch) Subscribe(ch chan Event) {
 	m.mutex.Lock()
 	m.subscribers = append(m.subscribers, ch)
@@ -177,6 +180,7 @@ func (m *GameMatch) GameLoop(id string) {
 		case *JoinCommand:
 			c.Match = m.gameinfo
 			c.execute()
+			m.repo.SaveGame(m.gameinfo)
 			game := make(map[string]*domain.Game)
 			game["game"] = m.gameinfo.Clone()
 			m.broadcast(Event{Event: "state", Payload: game})
@@ -185,6 +189,7 @@ func (m *GameMatch) GameLoop(id string) {
 			c.Match = m.gameinfo
 			// オセロを動かす処理の実行
 			c.execute()
+			m.repo.SaveGame(m.gameinfo)
 			// クライアントにオセロの移動情報とゲームの状態を同期する
 			m.broadcast(Event{Event: "move",
 				Payload: map[string]any{

@@ -20,6 +20,7 @@ func main() {
 	r.POST("move/:gameId", gameRequestHandler.MoveOthello)
 	r.GET(":gameId/ws", websocket.ServeWS)
 	r.GET("/getstate/:gameId", gameRequestHandler.GetGameState)
+	r.GET("/getChats/:gameId", gameRequestHandler.GetChats)
 
 	r.Run()
 }
