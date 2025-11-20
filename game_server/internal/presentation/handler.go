@@ -127,7 +127,7 @@ func (rh *GameRequestHandler) GetChats(ctx *gin.Context) {
 	// とってきたチャットをどうやってクライアントに戻すか
 	chats := rh.matchManeger.GetChats(gameId)
 	if chats == nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "chats is exist"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "chats not exist"})
 		return
 	}
 	chatsSlice := make([]domain.Chat, 0)

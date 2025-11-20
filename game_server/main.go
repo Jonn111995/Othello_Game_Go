@@ -18,6 +18,7 @@ func main() {
 	r.POST("/create", gameRequestHandler.CreateGame)
 	r.POST(":gameId/join", gameRequestHandler.JoinGame)
 	r.POST("move/:gameId", gameRequestHandler.MoveOthello)
+	// クライアント起動した時にリクエストがクライアントから飛ばされる
 	r.GET(":gameId/ws", websocket.ServeWS)
 	r.GET("/getstate/:gameId", gameRequestHandler.GetGameState)
 	r.GET("/getChats/:gameId", gameRequestHandler.GetChats)

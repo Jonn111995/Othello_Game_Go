@@ -6,6 +6,7 @@ import (
 	"othello_game_go/internal/domain"
 	infra "othello_game_go/internal/infrastructure"
 	"sync"
+	"time"
 )
 
 type IGameMatchManeger interface {
@@ -18,19 +19,29 @@ type IGameMatchManeger interface {
 	PublishEvent(gameId string, event Event) error
 	SaveChats(gameId string, chat domain.Chat) error
 	GetChats(gameId string) []*domain.Chat
+	EnqueuePersist(req *infra.PersistRequest) bool
+	persistWorker(workerID int)
+	handlePersistWithRetry(req *infra.PersistRequest) error
+	handlePersistOnce(req *infra.PersistRequest) error
 }
 
 type GameMatchManeger struct {
 	gameMatches map[string]*GameMatch
 	repo        infra.IMemoryRepository
+	persistCh   chan *infra.PersistRequest
+	stopCh      chan struct{}
 	mu          sync.RWMutex
 }
 
 func NewGameMatchManeger(repo infra.IMemoryRepository) IGameMatchManeger {
-	return &GameMatchManeger{
+	gm := &GameMatchManeger{
 		gameMatches: make(map[string]*GameMatch),
 		repo:        repo,
+		persistCh:   make(chan *infra.PersistRequest, 8192),
+		stopCh:      make(chan struct{}),
 	}
+	go gm.persistWorker(1)
+	return gm
 }
 
 func (gm *GameMatchManeger) ExecuteCommand(gameId string, command ICommand) error {
@@ -46,7 +57,10 @@ func (gm *GameMatchManeger) ExecuteCommand(gameId string, command ICommand) erro
 
 func (gm *GameMatchManeger) CreateGameMatch(playerName string) (gameId, playerId string, err error) {
 	gameInfo, pId := gm.createGameInfo(playerName)
-	gameMatch := NewGameMatch(gameInfo, gm.repo)
+	// MatchManegerにDBの保存リクエストを受け取る関数を実装している
+	// GameMatchには、その関数のみを定義したinterfaceをメンバーに持っているので
+	// 引数としてMangerを渡せる。かつManegerの他の関数は使えないので疎結合になる
+	gameMatch := NewGameMatch(gameInfo, gm)
 	if err := gm.addGameMatch(gameMatch); err != nil {
 		return "", "", err
 	}
@@ -168,5 +182,103 @@ func (gm *GameMatchManeger) addGameMatch(match IGameMatch) error {
 		return nil
 	default:
 		return errors.New("not exist kind og IGameMatch Interface")
+	}
+}
+
+/*
+* レポジトリへの永続化関連の処理
+ */
+
+// persitチャンネルに保存リクエストを送信する
+func (gs *GameMatchManeger) EnqueuePersist(req *infra.PersistRequest) bool {
+	select {
+	case gs.persistCh <- req:
+		return true
+	// persistChが満杯で受け取れない場合は、falseを返す
+	default:
+		return false
+	}
+}
+
+func (gs *GameMatchManeger) persistWorker(workerID int) {
+
+	for {
+		select {
+		// persistチャンネルから保存リクエストを取り出す
+		case req := <-gs.persistCh:
+			// nilの場合は、先頭に戻ってまたチャンネルにリクエストが送られることを待機する
+			if req == nil {
+				continue
+			}
+			// 保存リクエストを実行する
+			err := gs.handlePersistWithRetry(req)
+			// nilでなければ同期処理を表すので、err変数を返却する
+			if req.Ack != nil {
+				select {
+				case req.Ack <- err:
+				default:
+				}
+			}
+
+		case <-gs.stopCh:
+			return
+		}
+	}
+}
+
+func (gs *GameMatchManeger) handlePersistWithRetry(req *infra.PersistRequest) error {
+
+	// 最大リトライ回数
+	maxAttemps := 3
+	// エラー変数
+	var err error
+	// リトライ間隔
+	backOff := 50 * time.Millisecond
+	// リトライ回数分DBへの保存を試行する
+	for attempt := 1; attempt <= maxAttemps; attempt++ {
+		err = gs.handlePersistOnce(req)
+		// 成功すればnilを返して正常終了
+		if err == nil {
+			return nil
+		}
+		// errの場合はリトライ間隔分待機する
+		time.Sleep(backOff)
+		// 指数的バックオフなので、リトライ間隔を2倍する
+		backOff *= 2
+	}
+
+	// forを抜けてしまったら、errを返す
+	log.Printf("persist failed after retries: %v", err)
+	return err
+
+}
+
+func (gs *GameMatchManeger) handlePersistOnce(req *infra.PersistRequest) error {
+	switch req.Type {
+	case infra.PersistGame:
+		return gs.repo.SaveGame(req.Game)
+
+	case infra.PersistChat:
+		return gs.repo.SaveChats(req.Game.ID, req.Chat)
+
+	case infra.PersistGameAndChats:
+
+		// Game状態の保存
+		if req.Game != nil {
+			if err := gs.repo.SaveGame(req.Game); err != nil {
+				return err
+			}
+		}
+
+		// 複数チャットの保存
+		for _, chat := range req.Chats {
+			if err := gs.repo.SaveChats(req.Game.ID, chat); err != nil {
+				return err
+			}
+		}
+		return nil
+
+	default:
+		return nil
 	}
 }

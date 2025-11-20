@@ -4,11 +4,13 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log"
 	"othello_game_go/internal/domain"
 	infra "othello_game_go/internal/infrastructure"
 	"strconv"
 	"sync"
+	"time"
 )
 
 type IGameMatch interface {
@@ -16,6 +18,8 @@ type IGameMatch interface {
 	Subscribe(ch chan Event)
 	UnSubscribe(ch chan Event)
 	PublishEvent(e Event)
+	NotifyPersistAsync(req *infra.PersistRequest)
+	NotifyPersistSync(req *infra.PersistRequest, timeout time.Duration) error
 }
 
 type ICommand interface {
@@ -24,7 +28,7 @@ type ICommand interface {
 
 type GameMatch struct {
 	gameinfo    *domain.Game
-	repo        infra.IMemoryRepositoryOnlySave
+	repo        infra.IPersistor
 	cmd         chan ICommand
 	mutex       sync.Mutex
 	subscribers []chan Event
@@ -40,7 +44,7 @@ type Reply struct {
 	Err    error
 }
 
-func NewGameMatch(gInfo *domain.Game, repo infra.IMemoryRepositoryOnlySave) IGameMatch {
+func NewGameMatch(gInfo *domain.Game, repo infra.IPersistor) IGameMatch {
 	return &GameMatch{
 		gameinfo: gInfo,
 		repo:     repo,
@@ -180,16 +184,32 @@ func (m *GameMatch) GameLoop(id string) {
 		case *JoinCommand:
 			c.Match = m.gameinfo
 			c.execute()
-			m.repo.SaveGame(m.gameinfo)
-			game := make(map[string]*domain.Game)
-			game["game"] = m.gameinfo.Clone()
-			m.broadcast(Event{Event: "state", Payload: game})
-		// オセロを動かす分岐
+
+			// ゲーム状態を保存する
+			req := &infra.PersistRequest{
+				Type: infra.PersistGame,
+				Game: m.gameinfo.Clone(),
+				Ack:  nil,
+			}
+			m.NotifyPersistAsync(req)
+
+			// ゲーム状態を他クライアントへ同期してもらう
+			// game := make(map[string]*domain.Game)
+			// game["game"] = m.gameinfo.Clone()
+			// m.broadcast(Event{Event: "state", Payload: *m.gameinfo.Clone()}) // オセロを動かす分岐
 		case *MoveCommand:
 			c.Match = m.gameinfo
 			// オセロを動かす処理の実行
 			c.execute()
-			m.repo.SaveGame(m.gameinfo)
+
+			// ゲーム状態を保存する
+			req := &infra.PersistRequest{
+				Type: infra.PersistGame,
+				Game: m.gameinfo.Clone(),
+				Ack:  nil,
+			}
+			m.NotifyPersistAsync(req)
+
 			// クライアントにオセロの移動情報とゲームの状態を同期する
 			m.broadcast(Event{Event: "move",
 				Payload: map[string]any{
@@ -209,6 +229,28 @@ func (m *GameMatch) GameLoop(id string) {
 			log.Printf("game looping default")
 		}
 		log.Printf("game looping session id : %s\n", m.gameinfo.ID)
+	}
+}
+
+func (m *GameMatch) NotifyPersistAsync(req *infra.PersistRequest) {
+	if !m.repo.EnqueuePersist(req) {
+		log.Printf("persist queue full; dropping persit request for", m.gameinfo.ID)
+	}
+}
+
+func (m *GameMatch) NotifyPersistSync(req *infra.PersistRequest, timeout time.Duration) error {
+	if !m.repo.EnqueuePersist(req) {
+		log.Printf("persist queue full; dropping persit request for", m.gameinfo.ID)
+		return fmt.Errorf("persist queue full")
+	}
+
+	// 同期でエラー変数の返却を待機して、呼び出し元に処理結果を伝える
+	select {
+	case err := <-req.Ack:
+		return err
+	// もしタイムアウト時間を過ぎたらエラーを返す
+	case <-time.After(timeout):
+		return fmt.Errorf("persist ack timeout")
 	}
 }
 

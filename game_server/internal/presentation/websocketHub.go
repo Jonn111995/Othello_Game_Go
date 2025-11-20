@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"othello_game_go/internal/domain"
+	infra "othello_game_go/internal/infrastructure"
 	"othello_game_go/internal/usecase"
 	"time"
 
@@ -17,11 +18,21 @@ type IWebsocketHandler interface {
 }
 
 type WebsocketHandler struct {
-	matchManeger usecase.IGameMatchManeger
+	matchManeger IWebSocketManager
 	upgrader     websocket.Upgrader
 }
 
-func NewWebsocketHandler(matchManeger usecase.IGameMatchManeger) IWebsocketHandler {
+type IWebSocketManager interface {
+	SetSubscribe(gameId string) (*chan usecase.Event, error)
+	RemoveSubscribe(gameId string, evCh *chan usecase.Event) error
+	ExecuteCommand(gameId string, command usecase.ICommand) error
+	GetMatch(gameId string) *usecase.GameMatch
+	PublishEvent(gameId string, event usecase.Event) error
+	GetChats(gameId string) []*domain.Chat
+	EnqueuePersist(req *infra.PersistRequest) bool
+}
+
+func NewWebsocketHandler(matchManeger IWebSocketManager) IWebsocketHandler {
 	return &WebsocketHandler{matchManeger: matchManeger}
 }
 
@@ -106,12 +117,35 @@ func (ws *WebsocketHandler) ServeWS(ctx *gin.Context) {
 	}()
 
 	// 初回にゲーム参加時のゲームの状態を同期する
+	// おそらくバグっている
+	// クライアント側は、まずJoinリクエストを送ってからWebsocket通信を確立するので、
+	// Join時にGame状態をWebsocket通信で送っても受け取れず盤面が表示されない
+	// そのため、Websocket通信を確立した時点でゲーム状態を同期する必要がある
 	rc := make(chan *domain.Game, 1)
 	ws.matchManeger.ExecuteCommand(gameId, &usecase.StateRequest{GameId: gameId, Reply: rc})
 	if gameinfo := <-rc; gameinfo != nil {
 		log.Println("serveWS gameinfo")
 		log.Printf("serveWS: %v", gameinfo)
 		b, _ := json.Marshal(map[string]any{"type": "state", "payload": *gameinfo.Clone()})
+
+		select {
+		case sendCh <- b:
+		default:
+			log.Println("sendCh full, dropping event for conn")
+		}
+	}
+	// 初回にチャット履歴を同期する
+	chats := ws.matchManeger.GetChats(gameId)
+	if chats != nil {
+		chatsSlice := make([]domain.Chat, 0)
+		for _, chat := range chats {
+			if chat != nil {
+				chatsSlice = append(chatsSlice, *chat.Clone())
+			}
+		}
+		chatsHistory := make(map[string][]domain.Chat)
+		chatsHistory["chats_history"] = chatsSlice
+		b, _ := json.Marshal(map[string]any{"type": "chats_history", "payload": chatsHistory})
 		select {
 		case sendCh <- b:
 		default:
@@ -153,7 +187,14 @@ func (ws *WebsocketHandler) ServeWS(ctx *gin.Context) {
 					// マッチマネージャーを介して、メッセージを送信する
 					ws.matchManeger.PublishEvent(gameId, event)
 					// チャットをリポジトリに保存する
-					ws.matchManeger.SaveChats(gameId, chat)
+					req := &infra.PersistRequest{
+						Type:  infra.PersistChat,
+						Game:  &domain.Game{ID: gameId},
+						Chat:  &chat,
+						Chats: nil,
+					}
+					// チャットを非同期で保存
+					ws.matchManeger.EnqueuePersist(req)
 				default:
 
 				}
