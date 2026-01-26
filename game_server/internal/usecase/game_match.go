@@ -4,18 +4,22 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log"
 	"othello_game_go/internal/domain"
+	infra "othello_game_go/internal/infrastructure"
 	"strconv"
 	"sync"
+	"time"
 )
 
 type IGameMatch interface {
-	CreateMatch(playerName string) (gameid, playerid string, err error)
-	ExecuteCommand(command ICommand)
-	GetMatch(gameId string) *domain.Game
+	GameLoop(id string)
 	Subscribe(ch chan Event)
 	UnSubscribe(ch chan Event)
+	PublishEvent(e Event)
+	NotifyPersistAsync(req *infra.PersistRequest)
+	NotifyPersistSync(req *infra.PersistRequest, timeout time.Duration) error
 }
 
 type ICommand interface {
@@ -23,9 +27,9 @@ type ICommand interface {
 }
 
 type GameMatch struct {
-	gameinfo map[string]*domain.Game
-	cmd      map[string]chan ICommand
-
+	gameinfo    *domain.Game
+	repo        infra.IPersistor
+	cmd         chan ICommand
 	mutex       sync.Mutex
 	subscribers []chan Event
 }
@@ -40,8 +44,11 @@ type Reply struct {
 	Err    error
 }
 
-func NewGameMatch() IGameMatch {
-	return &GameMatch{gameinfo: map[string]*domain.Game{}}
+func NewGameMatch(gInfo *domain.Game, repo infra.IPersistor) IGameMatch {
+	return &GameMatch{
+		gameinfo: gInfo,
+		repo:     repo,
+		cmd:      make(chan ICommand)}
 }
 
 type JoinCommand struct {
@@ -127,6 +134,9 @@ func (mc *MoveCommand) execute() {
 	}(mc.Match, p.ID)
 }
 
+type GetChatsCommand struct {
+}
+
 func (m *GameMatch) Subscribe(ch chan Event) {
 	m.mutex.Lock()
 	m.subscribers = append(m.subscribers, ch)
@@ -161,115 +171,87 @@ func (m *GameMatch) broadcast(e Event) {
 	}
 }
 
-func (m *GameMatch) CreateMatch(playerName string) (gameid, playerid string, err error) {
-	gameinfo := domain.Game{
-		ID:      "g" + RandomID(8),
-		Players: map[string]domain.Player{},
-		Status:  "Waiting",
-	}
-	pid := "p" + RandomID(8)
-	gameinfo.Players[pid] = domain.Player{
-		ID:    pid,
-		Name:  playerName,
-		Color: domain.Black,
-	}
-	gameinfo.Turn = pid
-	gameinfo.Board[3][3], gameinfo.Board[4][4] = domain.White, domain.White
-	gameinfo.Board[3][4], gameinfo.Board[4][3] = domain.Black, domain.Black
-
-	m.gameinfo[gameinfo.ID] = &gameinfo
-	m.cmd = map[string]chan ICommand{}
-	m.cmd[gameinfo.ID] = make(chan ICommand)
-	log.Printf("Create Match for : %s\n", playerName)
-
-	go m.gameLoop(gameinfo.ID)
-
-	return gameinfo.ID, pid, nil
+func (m *GameMatch) PublishEvent(e Event) {
+	m.broadcast(e)
 }
 
-func (m *GameMatch) gameLoop(id string) {
+func (m *GameMatch) GameLoop(id string) {
 	for {
 		// TODO コマンドが増えたら実装
 		//select {
-		cmd := <-m.cmd[id]
+		cmd := <-m.cmd
 		switch c := cmd.(type) {
 		case *JoinCommand:
-			if match, ok := m.gameinfo[c.GameId]; !ok {
-				c.Reply <- Reply{Err: errors.New("game match not exist")}
-			} else {
-				c.Match = match
-				c.execute()
-				game := make(map[string]*domain.Game)
-				game["game"] = m.gameinfo[id].Clone()
-				m.broadcast(Event{Event: "state", Payload: game})
+			c.Match = m.gameinfo
+			c.execute()
+
+			// ゲーム状態を保存する
+			req := &infra.PersistRequest{
+				Type: infra.PersistGame,
+				Game: m.gameinfo.Clone(),
+				Ack:  nil,
 			}
-		// オセロを動かす分岐
+			m.NotifyPersistAsync(req)
+
+			// ゲーム状態を他クライアントへ同期してもらう
+			// game := make(map[string]*domain.Game)
+			// game["game"] = m.gameinfo.Clone()
+			// m.broadcast(Event{Event: "state", Payload: *m.gameinfo.Clone()}) // オセロを動かす分岐
 		case *MoveCommand:
-			if match, ok := m.gameinfo[c.GameId]; !ok {
-				c.Reply <- Reply{Err: errors.New("game match not exist")}
-			} else {
-				c.Match = match
-				// オセロを動かす処理の実行
-				c.execute()
-				// クライアントにオセロの移動情報とゲームの状態を同期する
-				m.broadcast(Event{Event: "move",
-					Payload: map[string]any{
-						"player_id": c.PlayerId,
-						"x":         c.X,
-						"y":         c.Y,
-					}})
-				log.Printf("game loop board: %v", *m.gameinfo[id].Clone())
-				m.broadcast(Event{Event: "state",
-					Payload: *m.gameinfo[id].Clone(),
-				})
-				c.Reply <- Reply{Err: nil}
+			c.Match = m.gameinfo
+			// オセロを動かす処理の実行
+			c.execute()
+
+			// ゲーム状態を保存する
+			req := &infra.PersistRequest{
+				Type: infra.PersistGame,
+				Game: m.gameinfo.Clone(),
+				Ack:  nil,
 			}
+			m.NotifyPersistAsync(req)
+
+			// クライアントにオセロの移動情報とゲームの状態を同期する
+			m.broadcast(Event{Event: "move",
+				Payload: map[string]any{
+					"player_id": c.PlayerId,
+					"x":         c.X,
+					"y":         c.Y,
+				}})
+			log.Printf("game loop board: %v", *m.gameinfo.Clone())
+			m.broadcast(Event{Event: "state",
+				Payload: *m.gameinfo.Clone(),
+			})
+			c.Reply <- Reply{Err: nil}
 		case *StateRequest:
-			log.Printf("state request gameloop: %v", m.gameinfo[id].Clone())
-			c.Reply <- m.gameinfo[id].Clone()
+			log.Printf("state request gameloop: %v", m.gameinfo.Clone())
+			c.Reply <- m.gameinfo.Clone()
 		default:
 			log.Printf("game looping default")
 		}
-		log.Printf("game looping session id : %s\n", m.gameinfo[id].ID)
+		log.Printf("game looping session id : %s\n", m.gameinfo.ID)
 	}
 }
 
-func (m *GameMatch) ExecuteCommand(command ICommand) {
-	switch c := command.(type) {
-	case *JoinCommand:
-		if v, ok := m.cmd[c.GameId]; !ok {
-			c.Reply <- Reply{Err: errors.New("game match not exist")}
-
-		} else {
-			v <- c
-		}
-	case *MoveCommand:
-		if v, ok := m.cmd[c.GameId]; !ok {
-			c.Reply <- Reply{Err: errors.New("game match not exist")}
-		} else {
-			v <- c
-		}
-	case *StateRequest:
-		if v, ok := m.cmd[c.GameId]; !ok {
-			log.Println("state request nil")
-			c.Reply <- nil
-
-		} else {
-			log.Println("state request else")
-			v <- c
-
-		}
-	default:
-		log.Println("execute command default")
+func (m *GameMatch) NotifyPersistAsync(req *infra.PersistRequest) {
+	if !m.repo.EnqueuePersist(req) {
+		log.Printf("persist queue full; dropping persit request for", m.gameinfo.ID)
 	}
 }
 
-func (m *GameMatch) GetMatch(gameId string) *domain.Game {
-	g, ok := m.gameinfo[gameId]
-	if !ok {
-		return nil
+func (m *GameMatch) NotifyPersistSync(req *infra.PersistRequest, timeout time.Duration) error {
+	if !m.repo.EnqueuePersist(req) {
+		log.Printf("persist queue full; dropping persit request for", m.gameinfo.ID)
+		return fmt.Errorf("persist queue full")
 	}
-	return g
+
+	// 同期でエラー変数の返却を待機して、呼び出し元に処理結果を伝える
+	select {
+	case err := <-req.Ack:
+		return err
+	// もしタイムアウト時間を過ぎたらエラーを返す
+	case <-time.After(timeout):
+		return fmt.Errorf("persist ack timeout")
+	}
 }
 
 // ランダムなIDを生成する

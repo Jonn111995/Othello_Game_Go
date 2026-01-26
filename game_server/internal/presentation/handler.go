@@ -15,14 +15,15 @@ type IGameRequestHandler interface {
 	JoinGame(ctx *gin.Context)
 	MoveOthello(ctx *gin.Context)
 	GetGameState(ctx *gin.Context)
+	GetChats(ctx *gin.Context)
 }
 
 type GameRequestHandler struct {
-	match usecase.IGameMatch
+	matchManeger usecase.IGameMatchManeger
 }
 
-func NewGameRequestHandler(match usecase.IGameMatch) IGameRequestHandler {
-	return &GameRequestHandler{match: match}
+func NewGameRequestHandler(matchManeger usecase.IGameMatchManeger) IGameRequestHandler {
+	return &GameRequestHandler{matchManeger: matchManeger}
 }
 
 func (rh *GameRequestHandler) CreateGame(ctx *gin.Context) {
@@ -32,12 +33,19 @@ func (rh *GameRequestHandler) CreateGame(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	gameid, playerid, err := rh.match.CreateMatch(input.Player)
+	// ゲームマッチを作成し、エラーが無ければマッチを開始 = gameloopを開始してリクエストを受け付ける
+	gameId, playerId, err := rh.matchManeger.CreateGameMatch(input.Player)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"gameid": gameid, "playerid": playerid})
+	err = rh.matchManeger.StartGameMatch(gameId)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"gameid": gameId, "playerid": playerId})
 }
 
 func (rh *GameRequestHandler) JoinGame(ctx *gin.Context) {
@@ -55,7 +63,7 @@ func (rh *GameRequestHandler) JoinGame(ctx *gin.Context) {
 		PlayerName: input.Player,
 		Reply:      ch,
 	}
-	rh.match.ExecuteCommand(cm)
+	rh.matchManeger.ExecuteCommand(gameId, cm)
 	result := <-cm.Reply
 	if result.Err != nil {
 		if result.Err.Error() == "game match not exist" {
@@ -90,7 +98,7 @@ func (rh *GameRequestHandler) MoveOthello(ctx *gin.Context) {
 		Y:        input.Y,
 		Reply:    ch,
 	}
-	rh.match.ExecuteCommand(cm)
+	rh.matchManeger.ExecuteCommand(gameId, cm)
 
 	result := <-cm.Reply
 	if result.Err != nil {
@@ -100,19 +108,49 @@ func (rh *GameRequestHandler) MoveOthello(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{"move gid": gameId, "move pid": input.PlayerId, "X": input.X, "Y": input.Y})
 }
 
-func (rh *GameRequestHandler) GetGameState(ctx *gin.Context) {
+func (rh *GameRequestHandler) GetChats(ctx *gin.Context) {
 	gameId := ctx.Param("gameId")
-
-	ch := make(chan *domain.Game, 1)
-	cm := &usecase.StateRequest{
-		GameId: gameId,
-		Reply:  ch,
-	}
-	rh.match.ExecuteCommand(cm)
-	result := <-cm.Reply
-	if result == nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "game not exist"})
+	if gameId == "" {
+		log.Print("game id require")
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "gameId is required"})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"join_game gid": result})
+
+	// var input dto.GetChatsInput
+	// err := ctx.BindJSON(input)
+	// if err != nil {
+	// 	log.Print("err should bind")
+	// 	ctx.JSON(http.StatusBadRequest, gin.H{"error": "gameID is required"})
+	// 	return
+	// }
+
+	// とってきたチャットをどうやってクライアントに戻すか
+	chats := rh.matchManeger.GetChats(gameId)
+	if chats == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "chats not exist"})
+		return
+	}
+	chatsSlice := make([]domain.Chat, 0)
+	for _, chat := range chats {
+		chatsSlice = append(chatsSlice, *chat)
+	}
+	ctx.JSON(http.StatusOK, chatsSlice)
+
+}
+
+func (rh *GameRequestHandler) GetGameState(ctx *gin.Context) {
+	// gameId := ctx.Param("gameId")
+
+	// ch := make(chan *domain.Game, 1)
+	// cm := &usecase.StateRequest{
+	// 	GameId: gameId,
+	// 	Reply:  ch,
+	// }
+	// rh.match.ExecuteCommand(cm)
+	// result := <-cm.Reply
+	// if result == nil {
+	// 	ctx.JSON(http.StatusInternalServerError, gin.H{"error": "game not exist"})
+	// 	return
+	// }
+	// ctx.JSON(http.StatusOK, gin.H{"join_game gid": result})
 }
